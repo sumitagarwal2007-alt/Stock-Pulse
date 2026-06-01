@@ -1,0 +1,173 @@
+/* ============================================
+   StockPulse — Chart Styles
+   ============================================ */
+
+.chart-container {
+  background: var(--glass-bg);
+  backdrop-filter: var(--glass-blur);
+  -webkit-backdrop-filter: var(--glass-blur);
+  border: var(--glass-border);
+  border-radius: var(--radius-lg);
+  padding: var(--space-6);
+  position: relative;
+  overflow: hidden;
+}
+
+.chart-container::before {
+  content: '';
+  position: absolute;
+  top: 0;
+  left: 0;
+  right: 0;
+  height: 1px;
+  background: linear-gradient(90deg, 
+    transparent, 
+    rgba(255, 255, 255, 0.08), 
+    transparent
+  );
+}
+
+.chart-canvas-wrap {
+  position: relative;
+  width: 100%;
+  height: 380px;
+}
+
+.chart-canvas-wrap canvas {
+  width: 100% !important;
+  height: 100% !important;
+}
+
+/* ── Crosshair overlay ── */
+.chart-crosshair {
+  position: absolute;
+  top: 0;
+  left: 0;
+  right: 0;
+  bottom: 0;
+  pointer-events: none;
+}
+
+.chart-crosshair__line-v,
+.chart-crosshair__line-h {
+  position: absolute;
+  background: rgba(255, 255, 255, 0.1);
+}
+
+.chart-crosshair__line-v {
+  width: 1px;
+  top: 0;
+  bottom: 0;
+}
+
+.chart-crosshair__line-h {
+  height: 1px;
+  left: 0;
+  right: 0;
+}
+
+/* ── Sentiment Gauge ── */
+.sentiment-gauge-container {
+  background: var(--glass-bg);
+  backdrop-filter: var(--glass-blur);
+  -webkit-backdrop-filter: var(--glass-blur);
+  border: var(--glass-border);
+  border-radius: var(--radius-lg);
+  padding: var(--space-5);
+}
+
+.sentiment-gauge-wrap {
+  position: relative;
+  width: 100%;
+  max-width: 200px;
+  margin: 0 auto;
+}
+
+.sentiment-gauge-wrap canvas {
+  width: 100% !important;
+}
+
+.sentiment-gauge__label {
+  position: absolute;
+  bottom: 10px;
+  left: 50%;
+  transform: translateX(-50%);
+  text-align: center;
+}
+
+.sentiment-gauge__score {
+  font-family: var(--font-mono);
+  font-size: var(--text-2xl);
+  font-weight: var(--weight-bold);
+}
+
+.sentiment-gauge__text {
+  font-size: var(--text-xs);
+  color: var(--text-tertiary);
+  text-transform: uppercase;
+  letter-spacing: 1px;
+}
+
+/* ── Mini Sparkline ── */
+.sparkline-canvas {
+  display: block;
+}
+
+/* ── Chart Mention Markers ── */
+.chart-mention-marker {
+  position: absolute;
+  width: 12px;
+  height: 12px;
+  border-radius: 50%;
+  transform: translate(-50%, -50%);
+  cursor: pointer;
+  z-index: 5;
+  transition: all var(--transition-fast);
+}
+
+.chart-mention-marker:hover {
+  transform: translate(-50%, -50%) scale(1.5);
+  z-index: 10;
+}
+
+.chart-mention-marker--positive {
+  background: var(--bullish);
+  box-shadow: 0 0 8px var(--bullish-glow), 0 0 20px var(--bullish-dim);
+}
+
+.chart-mention-marker--negative {
+  background: var(--bearish);
+  box-shadow: 0 0 8px var(--bearish-glow), 0 0 20px var(--bearish-dim);
+}
+
+.chart-mention-marker--neutral {
+  background: var(--neutral);
+  box-shadow: 0 0 8px var(--neutral-glow), 0 0 20px var(--neutral-dim);
+}
+
+/* ── Performance Section ── */
+.performance-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(140px, 1fr));
+  gap: var(--space-3);
+}
+
+.performance-card {
+  text-align: center;
+  padding: var(--space-3);
+  border-radius: var(--radius-md);
+  background: var(--surface-glass);
+  border: 1px solid var(--border-subtle);
+}
+
+.performance-card__label {
+  font-size: var(--text-xs);
+  color: var(--text-tertiary);
+  margin-bottom: var(--space-1);
+}
+
+.performance-card__value {
+  font-family: var(--font-mono);
+  font-size: var(--text-md);
+  font-weight: var(--weight-bold);
+}

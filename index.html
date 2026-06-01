@@ -1,0 +1,207 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>StockPulse — Influencer Stock Monitor</title>
+  
+  <!-- Fonts -->
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+  <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&family=JetBrains+Mono:wght@400;500;700&display=swap" rel="stylesheet">
+  
+  <!-- External Libraries -->
+  <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
+  
+  <!-- Styles -->
+  <link rel="stylesheet" href="css/variables.css">
+  <link rel="stylesheet" href="css/base.css">
+  <link rel="stylesheet" href="css/components.css">
+  <link rel="stylesheet" href="css/charts.css">
+  <link rel="stylesheet" href="css/animations.css">
+</head>
+<body class="animate-fade-in">
+
+  <div id="app">
+    <!-- Header -->
+    <header class="app-header">
+      <div class="app-header__brand">
+        <div class="app-header__logo">📈</div>
+        <div>
+          <div class="app-header__title">StockPulse</div>
+          <div class="app-header__subtitle">Influencer Market Monitor</div>
+        </div>
+      </div>
+      <div class="app-header__right">
+        <div class="search-bar">
+          <svg class="search-bar__icon" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="11" cy="11" r="8"></circle><line x1="21" y1="21" x2="16.65" y2="16.65"></line></svg>
+          <input type="text" id="ticker-search-input" class="search-bar__input" placeholder="Search ticker...">
+        </div>
+        <button id="settings-btn" class="settings-btn" title="API Settings">
+          <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="12" cy="12" r="3"></circle><path d="M19.4 15a1.65 1.65 0 0 0 .33 1.82l.06.06a2 2 0 0 1 0 2.83 2 2 0 0 1-2.83 0l-.06-.06a1.65 1.65 0 0 0-1.82-.33 1.65 1.65 0 0 0-1 1.51V21a2 2 0 0 1-2 2 2 2 0 0 1-2-2v-.09A1.65 1.65 0 0 0 9 19.4a1.65 1.65 0 0 0-1.82.33l-.06.06a2 2 0 0 1-2.83 0 2 2 0 0 1 0-2.83l.06-.06a1.65 1.65 0 0 0 .33-1.82 1.65 1.65 0 0 0-1.51-1H3a2 2 0 0 1-2-2 2 2 0 0 1 2-2h.09A1.65 1.65 0 0 0 4.6 9a1.65 1.65 0 0 0-.33-1.82l-.06-.06a2 2 0 0 1 0-2.83 2 2 0 0 1 2.83 0l.06.06a1.65 1.65 0 0 0 1.82.33H9a1.65 1.65 0 0 0 1-1.51V3a2 2 0 0 1 2-2 2 2 0 0 1 2 2v.09a1.65 1.65 0 0 0 1 1.51 1.65 1.65 0 0 0 1.82-.33l.06-.06a2 2 0 0 1 2.83 0 2 2 0 0 1 0 2.83l-.06.06a1.65 1.65 0 0 0-.33 1.82V9a1.65 1.65 0 0 0 1.51 1H21a2 2 0 0 1 2 2 2 2 0 0 1-2 2h-.09a1.65 1.65 0 0 0-1.51 1z"></path></svg>
+        </button>
+        <div class="app-header__live">
+          <div class="app-header__live-dot"></div>
+          LIVE MARKET
+        </div>
+        <div class="app-header__date" id="current-date"></div>
+      </div>
+    </header>
+
+    <!-- Main Layout -->
+    <main class="app-content">
+      
+      <!-- Sidebar (Stocks List) -->
+      <aside class="sidebar animate-slide-in-left">
+        <div class="sidebar__title">Trending Stocks</div>
+        <div id="sidebar-stocks">
+          <!-- Populated by JS -->
+        </div>
+      </aside>
+
+      <!-- Center Content (Chart & Dashboard) -->
+      <section class="main-chart animate-fade-in-up">
+        
+        <!-- Header for selected stock -->
+        <div class="chart-header">
+          <div class="chart-header__left">
+            <div class="chart-header__ticker" id="header-ticker">--</div>
+            <div class="chart-header__company" id="header-company">--</div>
+          </div>
+          <div class="chart-header__right">
+            <div class="chart-header__price" id="header-price">--</div>
+            <div class="chart-header__change" id="header-change">--</div>
+          </div>
+        </div>
+
+        <!-- Quick Stats Bar -->
+        <div class="stats-bar">
+          <div class="stat-card">
+            <div class="stat-card__label">Influencer Mentions (15d)</div>
+            <div class="stat-card__value" id="stat-mentions">--</div>
+          </div>
+          <div class="stat-card">
+            <div class="stat-card__label">Est. Reach</div>
+            <div class="stat-card__value" id="stat-reach">--</div>
+          </div>
+          <div class="stat-card">
+            <div class="stat-card__label">Social Impact Score</div>
+            <div class="stat-card__value" id="stat-impact">--</div>
+          </div>
+        </div>
+
+        <div style="display: flex; gap: var(--space-4); margin-bottom: var(--space-4); flex-wrap: wrap;">
+          
+          <!-- Main Chart Container -->
+          <div class="chart-container" style="flex: 1; min-width: 0;">
+            
+            <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: var(--space-3);">
+              <div class="sidebar__title" style="padding: 0;">Price vs. Mentions Overlay</div>
+              <div class="time-tabs">
+                <button class="time-tab time-tab--active">15D</button>
+                <button class="time-tab">1M</button>
+                <button class="time-tab">3M</button>
+              </div>
+            </div>
+            
+            <div class="chart-canvas-wrap">
+              <canvas id="mainChart"></canvas>
+            </div>
+            
+            <!-- Chart Legend -->
+            <div class="chart-legend" style="justify-content: center; margin-top: var(--space-3);">
+              <div class="chart-legend__item">
+                <div class="chart-legend__dot sentiment-dot--positive"></div> Positive
+              </div>
+              <div class="chart-legend__item">
+                <div class="chart-legend__dot sentiment-dot--neutral"></div> Neutral
+              </div>
+              <div class="chart-legend__item">
+                <div class="chart-legend__dot sentiment-dot--negative"></div> Negative
+              </div>
+            </div>
+          </div>
+
+          <!-- Sentiment Gauge -->
+          <div class="sentiment-gauge-container">
+            <div class="sidebar__title" style="padding: 0; text-align: center; margin-bottom: var(--space-4);">AI Sentiment Analysis</div>
+            <div class="sentiment-gauge-wrap" style="height: 180px;">
+              <canvas id="sentimentGauge"></canvas>
+              <div class="sentiment-gauge__label"></div>
+            </div>
+          </div>
+
+        </div>
+      </section>
+
+      <!-- Right Feed -->
+      <aside class="feed-panel animate-slide-in-right">
+        <div class="feed-panel__title" style="display: flex; justify-content: space-between; align-items: center;">
+          <span>Influencer Feed</span>
+        </div>
+        
+        <!-- Filters -->
+        <div id="filters-container" style="margin-bottom: var(--space-2);"></div>
+        
+        <!-- Feed List -->
+        <div id="feed-container" style="display: flex; flex-direction: column; gap: var(--space-2);">
+          <!-- Populated by JS -->
+        </div>
+      </aside>
+
+    </main>
+  </div>
+
+  <!-- API Settings Modal -->
+  <div id="settings-modal" class="modal-overlay" style="display: none;">
+    <div class="glass-card modal-content">
+      <div class="modal-header">
+        <h3 style="margin-bottom: 0;">API Settings</h3>
+        <button id="close-modal-btn" style="background:none;border:none;color:var(--text-tertiary);cursor:pointer;font-size:20px;">×</button>
+      </div>
+      <div class="modal-body" style="margin-top: var(--space-4);">
+        <p style="margin-bottom: var(--space-4); font-size: var(--text-sm);">To get live stock data and news, please enter your free <a href="https://finnhub.io" target="_blank">Finnhub</a> API key.</p>
+        <div style="display: flex; flex-direction: column; gap: var(--space-2);">
+          <label style="font-size: var(--text-xs); font-weight: var(--weight-semibold); text-transform: uppercase;">Finnhub API Key</label>
+          <input type="text" id="api-key-input" placeholder="Enter API Key" style="background: rgba(0,0,0,0.2); border: 1px solid var(--border-subtle); color: white; padding: 10px; border-radius: 6px; font-family: var(--font-mono);">
+        </div>
+      </div>
+      <div class="modal-footer" style="margin-top: var(--space-5); display: flex; justify-content: flex-end;">
+        <button id="save-key-btn" style="background: var(--accent-primary); color: white; border: none; padding: 8px 16px; border-radius: 6px; font-weight: 600; cursor: pointer;">Save Key & Reload</button>
+      </div>
+    </div>
+  </div>
+
+  <!-- Global Loading Overlay -->
+  <div id="loading-overlay" class="modal-overlay" style="display: flex;">
+    <div class="spinner"></div>
+    <div style="margin-top: 16px; color: var(--text-secondary); font-weight: 600;">Loading live data...</div>
+  </div>
+
+  <!-- Scripts -->
+  <!-- 0. API -->
+  <script src="js/api/finnhub.js"></script>
+
+  <!-- 1. Data Layer -->
+  <script src="js/data/stocks.js"></script>
+  <script src="js/data/influencers.js"></script>
+  <script src="js/data/mentions.js"></script>
+  
+  <!-- 2. Utilities -->
+  <script src="js/utils/formatters.js"></script>
+  <script src="js/utils/sentiment.js"></script>
+  
+  <!-- 3. Charts -->
+  <script src="js/charts/stockChart.js"></script>
+  <script src="js/charts/sentimentGauge.js"></script>
+  
+  <!-- 4. Components -->
+  <script src="js/components/stockCard.js"></script>
+  <script src="js/components/feed.js"></script>
+  <script src="js/components/filters.js"></script>
+  <script src="js/components/dashboard.js"></script>
+  
+  <!-- 5. Main App -->
+  <script src="js/app.js"></script>
+</body>
+</html>
