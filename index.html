@@ -37,6 +37,12 @@
           <svg class="search-bar__icon" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="11" cy="11" r="8"></circle><line x1="21" y1="21" x2="16.65" y2="16.65"></line></svg>
           <input type="text" id="ticker-search-input" class="search-bar__input" placeholder="Search ticker...">
         </div>
+        
+        <div style="display: flex; gap: 8px; margin-right: 16px; background: rgba(0,0,0,0.2); padding: 4px; border-radius: 8px;">
+          <button id="tab-dashboard" class="settings-btn" style="color: var(--text-primary); font-size: 12px; font-weight: bold; background: rgba(255,255,255,0.1);">Dashboard</button>
+          <button id="tab-heatmap" class="settings-btn" style="color: var(--text-secondary); font-size: 12px; font-weight: bold;">Heatmap</button>
+        </div>
+        
         <button id="alerts-btn" class="settings-btn" title="Smart Alerts" style="margin-right: var(--space-2); color: var(--semantic-danger);">
           <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M18 8A6 6 0 0 0 6 8c0 7-3 9-3 9h18s-3-2-3-9"></path><path d="M13.73 21a2 2 0 0 1-3.46 0"></path></svg>
         </button>
@@ -56,7 +62,10 @@
       
       <!-- Sidebar (Stocks List) -->
       <aside class="sidebar animate-slide-in-left">
-        <div class="sidebar__title">Trending Stocks</div>
+        <div class="sidebar__title" style="display: flex; justify-content: space-between; align-items: center;">
+          Trending Stocks
+          <button id="manage-watchlist-btn" style="background: none; border: 1px solid var(--border-subtle); color: var(--text-secondary); cursor: pointer; padding: 4px 8px; border-radius: 4px; font-size: 10px; text-transform: uppercase;">Manage</button>
+        </div>
         <div id="sidebar-stocks">
           <!-- Populated by JS -->
         </div>
@@ -95,6 +104,10 @@
           <div class="stat-card">
             <div class="stat-card__label">Social Impact Score</div>
             <div class="stat-card__value" id="stat-impact">--</div>
+          </div>
+          <div class="stat-card">
+            <div class="stat-card__label">14-Day RSI (Tech)</div>
+            <div class="stat-card__value" id="stat-rsi">--</div>
           </div>
         </div>
 
@@ -153,6 +166,21 @@
       </aside>
 
     </main>
+    
+    <!-- Heatmap View (Initially Hidden) -->
+    <main id="heatmap-view" class="app-content animate-fade-in-up" style="display: none; padding: var(--space-5);">
+      <div style="max-width: 1200px; margin: 0 auto; width: 100%;">
+        <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: var(--space-4);">
+          <h2 style="font-size: 24px; font-weight: bold; margin: 0;">Macro Sector Heatmap</h2>
+          <div style="font-size: 14px; color: var(--text-secondary);">Real-time AI Sentiment Aggregation</div>
+        </div>
+        
+        <div id="heatmap-grid" style="display: grid; grid-template-columns: repeat(auto-fill, minmax(280px, 1fr)); gap: var(--space-4);">
+          <!-- Populated by JS -->
+        </div>
+      </div>
+    </main>
+    
   </div>
 
   <!-- API Settings Modal -->
@@ -178,6 +206,12 @@
             <input type="text" id="alpaca-key-input" placeholder="APCA-API-KEY-ID" style="background: rgba(0,0,0,0.2); border: 1px solid var(--border-subtle); color: white; padding: 10px; border-radius: 6px; font-family: var(--font-mono);">
             <input type="password" id="alpaca-secret-input" placeholder="APCA-API-SECRET-KEY" style="background: rgba(0,0,0,0.2); border: 1px solid var(--border-subtle); color: white; padding: 10px; border-radius: 6px; font-family: var(--font-mono); margin-top: 4px;">
           </div>
+          
+          <!-- Gemini AI -->
+          <div style="display: flex; flex-direction: column; gap: var(--space-2); margin-top: var(--space-2);">
+            <label style="font-size: var(--text-xs); font-weight: var(--weight-semibold); text-transform: uppercase; color: #88B3FF;">Google Gemini AI (News Summarization)</label>
+            <input type="password" id="gemini-key-input" placeholder="Enter Gemini API Key" style="background: rgba(0,0,0,0.2); border: 1px solid var(--border-subtle); color: white; padding: 10px; border-radius: 6px; font-family: var(--font-mono);">
+          </div>
         </div>
       </div>
       <div class="modal-footer" style="margin-top: var(--space-5); display: flex; justify-content: flex-end;">
@@ -195,6 +229,25 @@
       </div>
       <div class="modal-body" id="alerts-container" style="margin-top: var(--space-4); max-height: 400px; overflow-y: auto;">
         <!-- Populated by JS -->
+      </div>
+    </div>
+  </div>
+
+  <!-- Watchlist Modal -->
+  <div id="watchlist-modal" class="modal-overlay" style="display: none;">
+    <div class="glass-card modal-content" style="max-width: 400px;">
+      <div class="modal-header">
+        <h3 style="margin-bottom: 0;">Manage Watchlist</h3>
+        <button id="close-watchlist-btn" style="background:none;border:none;color:var(--text-tertiary);cursor:pointer;font-size:20px;">×</button>
+      </div>
+      <div class="modal-body" style="margin-top: var(--space-4);">
+        <div style="display: flex; gap: 8px; margin-bottom: 16px;">
+          <input type="text" id="new-ticker-input" placeholder="Enter Ticker (e.g. AAPL)" style="flex: 1; background: rgba(0,0,0,0.2); border: 1px solid var(--border-subtle); color: white; padding: 8px; border-radius: 6px; text-transform: uppercase;">
+          <button id="add-ticker-btn" style="background: var(--accent-primary); color: white; border: none; padding: 8px 16px; border-radius: 6px; font-weight: 600; cursor: pointer;">Add</button>
+        </div>
+        <div id="watchlist-items" style="display: flex; flex-direction: column; gap: 8px; max-height: 300px; overflow-y: auto;">
+          <!-- Populated by JS -->
+        </div>
       </div>
     </div>
   </div>
@@ -229,6 +282,7 @@
   <script src="js/components/feed.js"></script>
   <script src="js/components/filters.js"></script>
   <script src="js/components/dashboard.js"></script>
+  <script src="js/components/heatmap.js"></script>
   
   <!-- 5. Main App -->
   <script src="js/app.js"></script>

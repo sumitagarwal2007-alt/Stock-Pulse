@@ -1,5 +1,6 @@
 {
-  "finnhub_api_key": "d8f1crhr01qub7kfecm0d8f1crhr01qub7kfecmg",
+  "finnhub_api_key": "YOUR_FINNHUB_KEY",
+  "gemini_api_key": "YOUR_GEMINI_KEY",
   "watchlist": [
     "DELL",
     "TSLA",

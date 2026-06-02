@@ -1,0 +1,26 @@
+<!DOCTYPE html>
+<html>
+<head>
+</head>
+<body>
+  <div id="heatmap-grid"></div>
+  <script>
+    // Mock classes
+    window.MentionData = {
+      getAggregateSentiment: () => ({ score: 75, totalMentions: 10 })
+    };
+    
+    // Load heatmap script
+  </script>
+  <script src="../js/components/heatmap.js"></script>
+  <script>
+    const heatmap = new window.SectorHeatmap('heatmap-grid');
+    const stocks = [
+      { ticker: 'AAPL', sector: 'Tech' },
+      { ticker: 'TSLA', sector: 'Auto' }
+    ];
+    heatmap.render(stocks, []);
+    console.log("Heatmap HTML:", document.getElementById('heatmap-grid').innerHTML);
+  </script>
+</body>
+</html>

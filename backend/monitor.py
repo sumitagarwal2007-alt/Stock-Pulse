@@ -10,60 +10,40 @@ BASE_DIR = os.path.dirname(os.path.abspath(__file__))
 CONFIG_PATH = os.path.join(BASE_DIR, 'config.json')
 ALERTS_PATH = os.path.join(BASE_DIR, 'alerts.json')
 
-# Catalyst Engine Logic
-CATALYST_KEYWORDS = {
-    "partnership": "High",
-    "acquisition": "High",
-    "merger": "High",
-    "allocated": "High",
-    "awarded": "High",
-    "contract": "High",
-    "earnings beat": "High",
-    "fda approval": "High",
-    "soars": "High",
-    "plummets": "High",
-    "guidance raised": "High",
-    "ceo resigns": "High",
-    "investigation": "High"
-}
-
-def send_mac_notification(title, message):
-    """Trigger a native macOS Desktop Notification"""
-    safe_title = title.replace('"', '\\"')
-    safe_message = message.replace('"', '\\"')
-    
-    script = f'display notification "{safe_message}" with title "MarketOracle Alert: {safe_title}" sound name "Glass"'
-    try:
-        subprocess.run(["osascript", "-e", script], check=True)
-    except Exception as e:
-        print(f"Failed to send macOS notification: {e}")
-
-def analyze_catalyst(headline, summary):
-    """Scan text for catalytic events"""
-    text = f"{headline} {summary}".lower()
-    
-    triggered_catalyst = None
-    impact = "Low"
-    
-    for keyword, lvl in CATALYST_KEYWORDS.items():
-        if keyword in text:
-            triggered_catalyst = keyword
-            impact = lvl
-            break
-            
-    if triggered_catalyst:
-        prediction = f"Positive momentum likely due to {triggered_catalyst}."
-        if triggered_catalyst in ['investigation', 'ceo resigns', 'plummets']:
-            prediction = f"Negative momentum likely due to {triggered_catalyst}."
-            
-        return {
-            "isCatalyst": True,
-            "keyword": triggered_catalyst,
-            "impact": impact,
-            "prediction": prediction
-        }
+def analyze_catalyst_with_gemini(headline, summary, gemini_key):
+    """Scan text for catalytic events using Google Gemini 2.5 Flash"""
+    if not gemini_key:
+        return {"isCatalyst": False}
         
-    return {"isCatalyst": False}
+    url = f"https://generativelanguage.googleapis.com/v1beta/models/gemini-2.5-flash:generateContent?key={gemini_key}"
+    
+    prompt = (
+        "You are a quantitative AI analyst. Read the following news headline and summary. "
+        "Determine if it is a major market-moving catalyst (High impact) for the stock. "
+        "If it is NOT a catalyst, return exactly: {\"isCatalyst\": false}. "
+        "If it IS a catalyst, return exactly a JSON object in this format: "
+        "{\"isCatalyst\": true, \"keyword\": \"<1-3 word catalyst reason>\", \"impact\": \"High\", \"prediction\": \"<1 sentence Bull/Bear thesis prediction on stock price momentum>\"}. "
+        f"Headline: {headline} | Summary: {summary}"
+    )
+    
+    payload = {
+        "contents": [{"parts": [{"text": prompt}]}]
+    }
+    
+    try:
+        req = urllib.request.Request(url, data=json.dumps(payload).encode('utf-8'), headers={'Content-Type': 'application/json'}, method='POST')
+        with urllib.request.urlopen(req) as response:
+            data = json.loads(response.read().decode())
+            text_resp = data['candidates'][0]['content']['parts'][0]['text']
+            
+            # Clean up markdown JSON blocks if present
+            clean_text = text_resp.replace('```json', '').replace('```', '').strip()
+            
+            result = json.loads(clean_text)
+            return result
+    except Exception as e:
+        print(f"Gemini API Error: {e}")
+        return {"isCatalyst": False}
 
 def run_monitor():
     current_time = datetime.now().strftime("%I:%M:%S %p")
@@ -125,10 +105,10 @@ def run_monitor():
                 headline = article.get('headline', '')
                 summary = article.get('summary', '')
                 
-                analysis = analyze_catalyst(headline, summary)
+                analysis = analyze_catalyst_with_gemini(headline, summary, config.get("gemini_api_key"))
                 
-                if analysis.get('isCatalyst'):
-                    keyword = analysis['keyword']
+                if analysis and analysis.get('isCatalyst'):
+                    keyword = analysis.get('keyword', 'UNKNOWN')
                     print(f"🚨 TRENDING CATALYST FOUND FOR {ticker}: {keyword}", flush=True)
                     
                     # 4. Fetch Exact Live Quote to record Alert Price

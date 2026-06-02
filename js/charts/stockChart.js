@@ -29,13 +29,31 @@ class StockChart {
    * @param {Array} alerts - Array of backend smart alerts for this stock
    * @param {Number} livePrice - The current live price for prediction comparison
    * @param {Array} predictions - Array of predicted historical/future prices
+   * @param {Object} fullStock - The complete stock object with full historical prices (for SMAs)
    */
-  render(stock, mentions = [], alerts = [], livePrice = 0, predictions = []) {
+  render(stock, mentions = [], alerts = [], livePrice = 0, predictions = [], fullStock = null) {
     this.currentStock = stock;
     this.mentions = mentions;
     this.alerts = alerts;
     this.livePrice = livePrice;
     this.predictions = predictions;
+    
+    // SMA Calculation Helper
+    const calculateSMA = (data, windowSize) => {
+      const result = [];
+      for (let i = 0; i < data.length; i++) {
+        if (i < windowSize - 1) {
+          result.push(null);
+        } else {
+          let sum = 0;
+          for (let j = 0; j < windowSize; j++) {
+            sum += data[i - j];
+          }
+          result.push(sum / windowSize);
+        }
+      }
+      return result;
+    };
     
     const ctx = document.getElementById(this.canvasId).getContext('2d');
     
@@ -76,6 +94,47 @@ class StockChart {
         tension: 0.4
       }
     ];
+    
+    // Technical Indicators (SMA)
+    if (fullStock && fullStock.prices && fullStock.prices.length > 0) {
+      const fullPrices = fullStock.prices.map(p => p.close);
+      const sma20Full = calculateSMA(fullPrices, 20);
+      const sma50Full = calculateSMA(fullPrices, 50);
+      
+      // Slice the SMAs to match the current timeframe
+      const sliceLength = stock.prices.length;
+      const sma20Sliced = sma20Full.slice(-sliceLength);
+      const sma50Sliced = sma50Full.slice(-sliceLength);
+      
+      // Pad with nulls if there are future predictions
+      const futurePad = predictions.length > stock.prices.length ? predictions.length - stock.prices.length : 0;
+      const sma20Padded = [...sma20Sliced, ...Array(futurePad).fill(null)];
+      const sma50Padded = [...sma50Sliced, ...Array(futurePad).fill(null)];
+      
+      datasets.push({
+        label: '20-Day SMA',
+        data: sma20Padded,
+        borderColor: '#FFB74D', // Orange
+        borderWidth: 1.5,
+        backgroundColor: 'transparent',
+        fill: false,
+        pointRadius: 0,
+        pointHoverRadius: 0,
+        tension: 0.4
+      });
+      
+      datasets.push({
+        label: '50-Day SMA',
+        data: sma50Padded,
+        borderColor: '#4DB6AC', // Teal
+        borderWidth: 1.5,
+        backgroundColor: 'transparent',
+        fill: false,
+        pointRadius: 0,
+        pointHoverRadius: 0,
+        tension: 0.4
+      });
+    }
 
     if (predictedData.length > 0) {
       datasets.push({

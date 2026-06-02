@@ -28,13 +28,29 @@ class App {
     this.apiKeyInput = document.getElementById('api-key-input');
     this.alpacaKeyInput = document.getElementById('alpaca-key-input');
     this.alpacaSecretInput = document.getElementById('alpaca-secret-input');
+    this.geminiKeyInput = document.getElementById('gemini-key-input');
     this.searchInput = document.getElementById('ticker-search-input');
+    
+    // Watchlist UI
+    this.manageWatchlistBtn = document.getElementById('manage-watchlist-btn');
+    this.watchlistModal = document.getElementById('watchlist-modal');
+    this.closeWatchlistBtn = document.getElementById('close-watchlist-btn');
+    this.addTickerBtn = document.getElementById('add-ticker-btn');
+    this.newTickerInput = document.getElementById('new-ticker-input');
+    this.watchlistItemsContainer = document.getElementById('watchlist-items');
     
     // Alerts UI
     this.alertsBtn = document.getElementById('alerts-btn');
     this.alertsModal = document.getElementById('alerts-modal');
     this.closeAlertsBtn = document.getElementById('close-alerts-btn');
     this.alertsContainer = document.getElementById('alerts-container');
+    
+    // Tabs
+    this.tabDashboard = document.getElementById('tab-dashboard');
+    this.tabHeatmap = document.getElementById('tab-heatmap');
+    this.viewDashboard = document.querySelector('.app-content:not(#heatmap-view)');
+    this.viewHeatmap = document.getElementById('heatmap-view');
+    this.heatmap = null;
   }
 
   async init() {
@@ -55,6 +71,10 @@ class App {
     }
     
     this.dashboard = new window.Dashboard();
+    
+    if (document.getElementById('heatmap-grid')) {
+      this.heatmap = new window.SectorHeatmap('heatmap-grid');
+    }
 
     // Attach Event Listeners
     this.attachEvents();
@@ -88,6 +108,14 @@ class App {
         this.alpacaKeyInput.value = window.alpacaApi.keyId;
         this.alpacaSecretInput.value = window.alpacaApi.secretKey;
       }
+      
+      // Fetch Gemini key from backend config
+      fetch('/api/settings').then(res => res.json()).then(data => {
+        if (data.gemini_api_key) {
+          this.geminiKeyInput.value = data.gemini_api_key;
+        }
+      }).catch(e => console.log('Could not load backend settings'));
+      
       this.settingsModal.style.display = 'flex';
     });
 
@@ -99,12 +127,27 @@ class App {
       const finnhubKey = this.apiKeyInput.value.trim();
       const alpacaKey = this.alpacaKeyInput.value.trim();
       const alpacaSecret = this.alpacaSecretInput.value.trim();
+      const geminiKey = this.geminiKeyInput.value.trim();
       
       if (finnhubKey) {
         window.finnhubApi.setApiKey(finnhubKey);
         
         if (window.alpacaApi && alpacaKey && alpacaSecret) {
           window.alpacaApi.setKeys(alpacaKey, alpacaSecret);
+        }
+        
+        // Save to Python Backend
+        try {
+          await fetch('/api/settings', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({
+              finnhub_api_key: finnhubKey,
+              gemini_api_key: geminiKey
+            })
+          });
+        } catch(e) {
+          console.error("Failed to save backend config", e);
         }
         
         this.settingsModal.style.display = 'none';
@@ -126,6 +169,27 @@ class App {
       });
     }
 
+    // Watchlist Management
+    if (this.manageWatchlistBtn) {
+      this.manageWatchlistBtn.addEventListener('click', () => {
+        this.renderWatchlistModal();
+        this.watchlistModal.style.display = 'flex';
+      });
+      
+      this.closeWatchlistBtn.addEventListener('click', () => {
+        this.watchlistModal.style.display = 'none';
+        this.render(); // Re-render sidebar to show any updates
+      });
+      
+      this.addTickerBtn.addEventListener('click', () => {
+        const newTicker = this.newTickerInput.value.trim().toUpperCase();
+        if (newTicker) {
+          this.addToWatchlist(newTicker);
+          this.newTickerInput.value = '';
+        }
+      });
+    }
+
     // Alerts Modal
     if (this.alertsBtn) {
       this.alertsBtn.addEventListener('click', () => {
@@ -137,6 +201,36 @@ class App {
     if (this.closeAlertsBtn) {
       this.closeAlertsBtn.addEventListener('click', () => {
         this.alertsModal.style.display = 'none';
+      });
+    }
+
+    // Tabs Logic
+    if (this.tabDashboard && this.tabHeatmap) {
+      this.tabDashboard.addEventListener('click', () => {
+        this.tabDashboard.style.background = 'rgba(255,255,255,0.1)';
+        this.tabDashboard.style.color = 'var(--text-primary)';
+        this.tabHeatmap.style.background = 'transparent';
+        this.tabHeatmap.style.color = 'var(--text-secondary)';
+        
+        this.viewDashboard.style.display = 'flex';
+        this.viewHeatmap.style.display = 'none';
+      });
+      
+      this.tabHeatmap.addEventListener('click', () => {
+        this.tabHeatmap.style.background = 'rgba(255,255,255,0.1)';
+        this.tabHeatmap.style.color = 'var(--text-primary)';
+        this.tabDashboard.style.background = 'transparent';
+        this.tabDashboard.style.color = 'var(--text-secondary)';
+        
+        this.viewDashboard.style.display = 'none';
+        this.viewHeatmap.style.display = 'block';
+        
+        // Force heatmap render
+        if (this.heatmap) {
+          const allStocks = window.StockData.getAllStocks();
+          const mentions = window.MentionData.getAllMentions();
+          this.heatmap.render(allStocks, mentions);
+        }
       });
     }
 
@@ -153,6 +247,79 @@ class App {
         this.render();
       });
     });
+  }
+
+  renderWatchlistModal() {
+    this.watchlistItemsContainer.innerHTML = '';
+    const currentList = window.STOCKS || window.StockData.getAllStocks();
+    
+    currentList.forEach(stock => {
+      const item = document.createElement('div');
+      item.style.display = 'flex';
+      item.style.justifyContent = 'space-between';
+      item.style.alignItems = 'center';
+      item.style.background = 'rgba(255,255,255,0.05)';
+      item.style.padding = '8px 12px';
+      item.style.borderRadius = '6px';
+      
+      const tickerLabel = document.createElement('span');
+      tickerLabel.style.fontWeight = '600';
+      tickerLabel.innerText = stock.ticker;
+      
+      const delBtn = document.createElement('button');
+      delBtn.innerText = 'Remove';
+      delBtn.style.background = 'var(--semantic-danger)';
+      delBtn.style.color = 'white';
+      delBtn.style.border = 'none';
+      delBtn.style.padding = '4px 8px';
+      delBtn.style.borderRadius = '4px';
+      delBtn.style.cursor = 'pointer';
+      delBtn.style.fontSize = '12px';
+      
+      delBtn.onclick = () => {
+        this.removeFromWatchlist(stock.ticker);
+      };
+      
+      item.appendChild(tickerLabel);
+      item.appendChild(delBtn);
+      this.watchlistItemsContainer.appendChild(item);
+    });
+  }
+
+  async addToWatchlist(ticker) {
+    const success = await window.StockData.addStock(ticker);
+    if (success) {
+      this.renderWatchlistModal();
+      this.syncWatchlistToBackend();
+    } else {
+      alert('Could not find data for ticker: ' + ticker);
+    }
+  }
+
+  removeFromWatchlist(ticker) {
+    if (window.STOCKS) {
+      window.STOCKS = window.STOCKS.filter(s => s.ticker !== ticker);
+    }
+    this.renderWatchlistModal();
+    this.syncWatchlistToBackend();
+    
+    if (this.selectedTicker === ticker) {
+      const first = window.STOCKS[0];
+      if (first) this.selectStock(first.ticker);
+    }
+  }
+
+  async syncWatchlistToBackend() {
+    const tickers = (window.STOCKS || []).map(s => s.ticker);
+    try {
+      await fetch('/api/settings', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ watchlist: tickers })
+      });
+    } catch(e) {
+      console.warn("Could not sync watchlist to backend config", e);
+    }
   }
 
   async fetchAndRenderAlerts() {
@@ -339,7 +506,8 @@ class App {
     }
     
     if (this.stockChart) {
-      this.stockChart.render(chartStockObj, mentions, stockAlerts, latestPrice.close, predictions);
+      // Pass the full stock object as well so the chart can compute moving averages
+      this.stockChart.render(chartStockObj, mentions, stockAlerts, latestPrice.close, predictions, stock);
     }
     
     if (this.sentimentGauge) {
@@ -348,6 +516,12 @@ class App {
 
     // 4. Render Feed
     this.dashboard.renderFeed(mentions, this.filterState);
+    
+    // 5. Update Heatmap (if active)
+    if (this.heatmap && this.viewHeatmap.style.display === 'block') {
+      const allMentions = window.MentionData.getAllMentions();
+      this.heatmap.render(allStocks, allMentions);
+    }
   }
 
   selectStock(ticker) {

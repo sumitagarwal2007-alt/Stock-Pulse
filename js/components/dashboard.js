@@ -17,6 +17,7 @@ class Dashboard {
     this.statMentions = document.getElementById('stat-mentions');
     this.statReach = document.getElementById('stat-reach');
     this.statImpact = document.getElementById('stat-impact');
+    this.statRSI = document.getElementById('stat-rsi');
     
     // Initialize components
     this.filters = new window.Filters(this.onFilterChange.bind(this));
@@ -65,6 +66,35 @@ class Dashboard {
       // Impact score
       let impactScore = Math.min(100, 40 + (sentiment.totalMentions * 5));
       this.statImpact.innerText = `${Math.round(impactScore)}/100`;
+    }
+    
+    // Compute 14-Day RSI
+    if (this.statRSI && stock.prices && stock.prices.length > 14) {
+      let gains = 0;
+      let losses = 0;
+      // Look at the last 14 days
+      const last14 = stock.prices.slice(-15); // Need 15 to get 14 days of changes
+      
+      for (let i = 1; i < last14.length; i++) {
+        const change = last14[i].close - last14[i-1].close;
+        if (change > 0) gains += change;
+        else losses += Math.abs(change);
+      }
+      
+      const avgGain = gains / 14;
+      const avgLoss = losses / 14;
+      
+      let rsi = 50;
+      if (avgLoss === 0) rsi = 100;
+      else {
+        const rs = avgGain / avgLoss;
+        rsi = 100 - (100 / (1 + rs));
+      }
+      
+      this.statRSI.innerText = rsi.toFixed(1);
+      if (rsi >= 70) this.statRSI.style.color = 'var(--semantic-danger)'; // Overbought (Red)
+      else if (rsi <= 30) this.statRSI.style.color = 'var(--semantic-success)'; // Oversold (Green)
+      else this.statRSI.style.color = 'var(--text-primary)';
     }
   }
 
