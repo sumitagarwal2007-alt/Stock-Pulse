@@ -1,0 +1,42 @@
+[
+  {
+    "id": "1780363900224",
+    "ticker": "PLTR",
+    "timestamp": "2026-06-01T20:31:40.224279Z",
+    "headline": "Nvidia Highlights New AI Products at Computex",
+    "url": "https://finnhub.io/api/news?id=60231cde01a36df415c733295f42e29288b014ce1bdb997513e81055cccd34ba",
+    "keyword": "partnership",
+    "impact": "High",
+    "prediction": "Positive momentum likely due to partnership."
+  },
+  {
+    "id": "1780363898168",
+    "ticker": "MSFT",
+    "timestamp": "2026-06-01T20:31:38.168845Z",
+    "headline": "Morgan Stanley resets Microsoft stock price target",
+    "url": "https://finnhub.io/api/news?id=03a40237f3c54845a3a59c1869eefcdd3d27422064133860f1a73af02117dff9",
+    "keyword": "acquisition",
+    "impact": "High",
+    "prediction": "Positive momentum likely due to acquisition."
+  },
+  {
+    "id": "1780363894923",
+    "ticker": "DELL",
+    "timestamp": "2026-06-01T20:31:34.923534Z",
+    "headline": "Hewlett Packard Enterprise stock soars 36% as AI server demand drives FY outlook",
+    "url": "https://finnhub.io/api/news?id=eab1c593bb36993355ca95075ff6de2bcaa30617b67aba14c06674ae4ddaf7e9",
+    "keyword": "soars",
+    "impact": "High",
+    "prediction": "Positive momentum likely due to soars."
+  },
+  {
+    "id": "1780363894791",
+    "ticker": "DELL",
+    "timestamp": "2026-06-01T20:31:34.791117Z",
+    "headline": "Arm\u2019s Role Widens In AI PCs And Data Centers With Nvidia",
+    "url": "https://finnhub.io/api/news?id=9fbb8cbb602ac04dc0a98f24f06e4808623836b4f3f34535879ef9635b4dd2eb",
+    "keyword": "partnership",
+    "impact": "High",
+    "prediction": "Positive momentum likely due to partnership."
+  }
+]

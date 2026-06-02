@@ -1,0 +1,13 @@
+{
+  "finnhub_api_key": "d8f1crhr01qub7kfecm0d8f1crhr01qub7kfecmg",
+  "watchlist": [
+    "DELL",
+    "TSLA",
+    "NVDA",
+    "AAPL",
+    "MSFT",
+    "AMD",
+    "PLTR"
+  ],
+  "check_interval_minutes": 15
+}

@@ -26,13 +26,13 @@ class Dashboard {
   /**
    * Render the sidebar stock list
    */
-  renderSidebar(stocks, selectedTicker) {
+  renderSidebar(stocks, selectedTicker, timeframe = 15) {
     if (!this.sidebarContainer) return;
     
     const html = stocks.map(stock => {
       const latest = window.StockData.getLatestPrice(stock.ticker);
       const sentiment = window.MentionData.getAggregateSentiment(stock.ticker);
-      return window.StockCard.render(stock, latest, sentiment, stock.ticker === selectedTicker);
+      return window.StockCard.render(stock, latest, sentiment, stock.ticker === selectedTicker, timeframe);
     }).join('');
     
     this.sidebarContainer.innerHTML = html;
@@ -66,6 +66,45 @@ class Dashboard {
       let impactScore = Math.min(100, 40 + (sentiment.totalMentions * 5));
       this.statImpact.innerText = `${Math.round(impactScore)}/100`;
     }
+  }
+
+  /**
+   * Instantly flash and update the live price from WebSocket
+   */
+  updateLivePrice(lastClose, liveTrade) {
+    if (!this.headerPrice || !this.headerChange) return;
+
+    const currentStr = this.headerPrice.innerText;
+    const currentPrice = parseFloat(currentStr.replace(/[^0-9.-]+/g, ''));
+    
+    // Ignore if price hasn't changed to prevent unnecessary flashes
+    if (Math.abs(currentPrice - liveTrade.p) < 0.001) return;
+
+    const newPrice = liveTrade.p;
+    const change = newPrice - lastClose;
+    const changePercent = (change / lastClose) * 100;
+    const isUp = change >= 0;
+
+    // Update DOM
+    this.headerPrice.innerText = window.Formatters.formatCurrency(newPrice);
+    
+    const changeClass = isUp ? 'stock-card__change--up' : 'stock-card__change--down';
+    const changeIcon = isUp ? '↑' : '↓';
+    
+    this.headerChange.className = `chart-header__change ${changeClass}`;
+    this.headerChange.innerHTML = `${changeIcon} ${window.Formatters.formatCurrency(Math.abs(change))} (${window.Formatters.formatPercent(changePercent, false)})`;
+
+    // Apply flash animation
+    const flashClass = newPrice > currentPrice ? 'flash-green' : 'flash-red';
+    
+    // Remove class, trigger reflow, add class again to restart animation
+    this.headerPrice.classList.remove('flash-green', 'flash-red');
+    this.headerChange.classList.remove('flash-green', 'flash-red');
+    
+    void this.headerPrice.offsetWidth; // trigger reflow
+    
+    this.headerPrice.classList.add(flashClass);
+    this.headerChange.classList.add(flashClass);
   }
 
   /**

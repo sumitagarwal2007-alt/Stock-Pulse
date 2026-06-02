@@ -10,15 +10,17 @@ class StockCard {
    * @param {Object} latestPrice - The latest price data with change info
    * @param {Object} sentiment - The aggregate sentiment for the stock
    * @param {boolean} isSelected - Whether this card is currently selected
+   * @param {number} timeframe - The number of days to slice the sparkline data for
    * @returns {string} HTML string
    */
-  static render(stock, latestPrice, sentiment, isSelected = false) {
+  static render(stock, latestPrice, sentiment, isSelected = false, timeframe = 15) {
     const changeClass = latestPrice.isUp ? 'stock-card__change--up' : 'stock-card__change--down';
     const changeIcon = latestPrice.isUp ? '↑' : '↓';
     const selectedClass = isSelected ? 'stock-card--selected' : '';
     
     // Convert array of prices to simple path string for SVG sparkline
-    const prices = stock.prices.map(p => p.close);
+    const slicedPrices = stock.prices.slice(-timeframe);
+    const prices = slicedPrices.map(p => p.close);
     const min = Math.min(...prices);
     const max = Math.max(...prices);
     const range = max - min;

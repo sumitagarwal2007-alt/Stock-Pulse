@@ -7,6 +7,8 @@ class FinnhubAPI {
   constructor() {
     this.apiKey = localStorage.getItem('finnhub_api_key') || '';
     this.baseUrl = 'https://finnhub.io/api/v1';
+    this.ws = null;
+    this.onTradeCallback = null;
   }
 
   setApiKey(key) {
@@ -45,11 +47,11 @@ class FinnhubAPI {
   }
 
   /**
-   * Get 15 days of historical data for a symbol (often restricted on free tier)
+   * Get 90 days of historical data for a symbol
    */
   async getHistoricalData(symbol) {
     const to = Math.floor(Date.now() / 1000);
-    const from = to - (15 * 24 * 60 * 60); // 15 days ago
+    const from = to - (90 * 24 * 60 * 60); // 90 days ago
 
     const data = await this.fetch('/stock/candle', {
       symbol,
@@ -98,6 +100,60 @@ class FinnhubAPI {
     });
 
     return data; // Array of news objects
+  }
+
+  /**
+   * Initialize WebSocket connection for live trades
+   */
+  connectWebSocket(callback) {
+    if (!this.apiKey) return;
+    
+    this.onTradeCallback = callback;
+    
+    // Close existing connection if any
+    if (this.ws) {
+      this.ws.close();
+    }
+
+    this.ws = new WebSocket(`wss://ws.finnhub.io?token=${this.apiKey}`);
+
+    this.ws.onopen = () => {
+      console.log('⚡ Finnhub WebSocket Connected');
+    };
+
+    this.ws.onmessage = (event) => {
+      try {
+        const data = JSON.parse(event.data);
+        if (data.type === 'trade' && this.onTradeCallback) {
+          // data.data is an array of trades, we usually just care about the last one
+          const lastTrade = data.data[data.data.length - 1];
+          this.onTradeCallback(lastTrade);
+        }
+      } catch (e) {
+        console.error('WebSocket parsing error:', e);
+      }
+    };
+    
+    this.ws.onclose = () => {
+      console.log('⚡ Finnhub WebSocket Disconnected');
+    };
+  }
+
+  subscribe(symbol) {
+    if (this.ws && this.ws.readyState === WebSocket.OPEN) {
+      this.ws.send(JSON.stringify({'type':'subscribe', 'symbol': symbol}));
+      console.log(`Subscribed to live trades for ${symbol}`);
+    } else if (this.ws && this.ws.readyState === WebSocket.CONNECTING) {
+      // If it's still connecting, wait and retry
+      this.ws.addEventListener('open', () => this.subscribe(symbol), { once: true });
+    }
+  }
+
+  unsubscribe(symbol) {
+    if (this.ws && this.ws.readyState === WebSocket.OPEN) {
+      this.ws.send(JSON.stringify({'type':'unsubscribe', 'symbol': symbol}));
+      console.log(`Unsubscribed from live trades for ${symbol}`);
+    }
   }
 }
 

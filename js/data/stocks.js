@@ -26,12 +26,20 @@ function generateMockPrices(ticker, targetLivePrice = null) {
   let currentPrice = targetLivePrice !== null ? targetLivePrice : (100 + (ticker.length * 20) + (Math.random() * 50));
   
   // We need to generate the array in reverse, so we'll build it backwards then reverse it
-  for (let i = 0; i <= 14; i++) {
+  for (let i = 0; i <= 89; i++) {
     const d = new Date(to);
     d.setDate(d.getDate() - i);
     
     // We reverse the logic: previous close was currentPrice / (1 + changePercent)
-    const changePercent = (Math.random() - 0.5) * 0.06;
+    let changePercent = (Math.random() - 0.5) * 0.06;
+    
+    // Simulate real massive historical bull-runs for known trending stocks
+    // (A positive daily drift going forward means a negative drift going backwards)
+    if (ticker === 'DELL') changePercent += 0.012; // Dell massive run
+    if (ticker === 'NVDA') changePercent += 0.015; // Nvidia massive run
+    if (ticker === 'PLTR') changePercent += 0.008; // Palantir strong run
+    if (ticker === 'GME') changePercent += (Math.random() > 0.8 ? 0.15 : -0.05); // Meme volatility
+    
     const prevClose = currentPrice / (1 + changePercent);
     const high = Math.max(currentPrice, prevClose) * (1 + Math.random() * 0.02);
     const low = Math.min(currentPrice, prevClose) * (1 - Math.random() * 0.02);
@@ -60,9 +68,23 @@ async function loadAllStockPrices() {
       const quote = await window.finnhubApi.getQuote(stock.ticker);
       
       if (quote && quote.c) {
-        console.log(`Loaded live quote for ${stock.ticker}: $${quote.c}`);
-        // Generate a beautiful mock chart that perfectly ends exactly at the live price!
-        const hybridPrices = generateMockPrices(stock.ticker, quote.c);
+        // Try to fetch real historical data first!
+        let historicalPrices = [];
+        try {
+          if (window.alpacaApi && window.alpacaApi.hasKeys()) {
+            historicalPrices = await window.alpacaApi.getHistoricalData(stock.ticker);
+          } else {
+            historicalPrices = await window.finnhubApi.getHistoricalData(stock.ticker);
+          }
+        } catch(e) { console.warn('Real historical data blocked or keys invalid, using fallback'); }
+        
+        let hybridPrices;
+        if (historicalPrices && historicalPrices.length > 30) {
+          hybridPrices = historicalPrices;
+        } else {
+          // Generate a beautiful mock chart that perfectly ends exactly at the live price!
+          hybridPrices = generateMockPrices(stock.ticker, quote.c);
+        }
         
         // Ensure the absolute latest price matches the quote perfectly
         const last = hybridPrices[hybridPrices.length - 1];
@@ -122,8 +144,23 @@ async function addStock(ticker) {
     };
     STOCKS.push(newStock);
     
-    // 3. Generate the data
-    const hybridPrices = generateMockPrices(upperTicker, quote.c);
+    // 3. Try to fetch REAL historical data
+    let historicalPrices = [];
+    try {
+      if (window.alpacaApi && window.alpacaApi.hasKeys()) {
+        historicalPrices = await window.alpacaApi.getHistoricalData(upperTicker);
+      } else {
+        historicalPrices = await window.finnhubApi.getHistoricalData(upperTicker);
+      }
+    } catch(e) { console.warn('Real historical data blocked or keys invalid, using fallback'); }
+    
+    let hybridPrices;
+    if (historicalPrices && historicalPrices.length > 30) {
+      hybridPrices = historicalPrices;
+    } else {
+      hybridPrices = generateMockPrices(upperTicker, quote.c);
+    }
+    
     const last = hybridPrices[hybridPrices.length - 1];
     last.close = quote.c;
     last.open = quote.o || last.open;

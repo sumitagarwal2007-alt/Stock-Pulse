@@ -122,16 +122,18 @@ class SentimentGauge {
     let labelEl = container.querySelector('.sentiment-gauge__label');
     if (!labelEl) return;
 
-    let color = this.colors.neutral;
-    if (sentimentData.overall === 'positive') color = this.colors.positive;
-    if (sentimentData.overall === 'negative') color = this.colors.negative;
-
-    // Use the highest percentage as the main score
+    // Find the mathematically dominant sentiment
     const highestScore = Math.max(sentimentData.positive, sentimentData.neutral, sentimentData.negative);
+    
+    let dominantType = 'neutral';
+    if (highestScore === sentimentData.positive) dominantType = 'positive';
+    else if (highestScore === sentimentData.negative) dominantType = 'negative';
+
+    let color = this.colors[dominantType];
 
     labelEl.innerHTML = `
       <div class="sentiment-gauge__score" style="color: ${color}">${highestScore}%</div>
-      <div class="sentiment-gauge__text" style="color: ${color}; text-transform: uppercase; font-size: 11px; letter-spacing: 1px; font-weight: 600;">${sentimentData.overall}</div>
+      <div class="sentiment-gauge__text" style="color: ${color}; text-transform: uppercase; font-size: 11px; letter-spacing: 1px; font-weight: 600;">${dominantType}</div>
     `;
   }
 }
