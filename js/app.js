@@ -465,30 +465,45 @@ class App {
   }
 
   async checkAndLoadData() {
+    const statusText = document.querySelector('#loading-overlay div:nth-child(2)');
+    const updateStatus = (msg) => {
+      if(statusText) statusText.innerText = msg;
+      console.log("[DEBUG]", msg);
+    };
+
+    // Show loading early
+    this.loadingOverlay.style.display = 'flex';
+    updateStatus('Fetching backend settings and keys...');
+
+    try {
+      const settingsResp = await fetch('/api/settings');
+      if (settingsResp.ok) {
+        const settings = await settingsResp.json();
+        
+        // Auto-load keys from backend config!
+        if (settings.finnhub_api_key) {
+          window.finnhubApi.setApiKey(settings.finnhub_api_key);
+        }
+        if (settings.alpaca_api_key && settings.alpaca_secret_key && window.alpacaApi) {
+          window.alpacaApi.setKeys(settings.alpaca_api_key, settings.alpaca_secret_key);
+        }
+        
+        if (settings.watchlist && settings.watchlist.length > 0) {
+          window.StockData.setStocksList(settings.watchlist);
+        }
+      }
+    } catch (e) {
+      console.warn("Failed to fetch settings from backend", e);
+    }
+
     if (!window.finnhubApi.hasApiKey()) {
       this.loadingOverlay.style.display = 'none';
       this.settingsModal.style.display = 'flex';
       return;
     }
 
-    // Show loading
-    this.loadingOverlay.style.display = 'flex';
-
     try {
-      // 1. Fetch backend settings to get the dynamic AI watchlist
-      try {
-        const settingsResp = await fetch('/api/settings');
-        if (settingsResp.ok) {
-          const settings = await settingsResp.json();
-          if (settings.watchlist && settings.watchlist.length > 0) {
-            window.StockData.setStocksList(settings.watchlist);
-          }
-        }
-      } catch (e) {
-        console.warn("Failed to fetch settings from backend", e);
-      }
-      
-      console.log('Fetching stock prices...');
+      updateStatus('Fetching stock prices...');
       await window.StockData.loadAllStockPrices();
       
       console.log('Fetching company news...');
