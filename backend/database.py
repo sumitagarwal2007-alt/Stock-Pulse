@@ -26,7 +26,8 @@ def init_db():
         sentiment TEXT,
         conviction INTEGER,
         price_target TEXT,
-        horizon TEXT
+        horizon TEXT,
+        recommended_action TEXT
     )
     ''')
     
@@ -35,7 +36,8 @@ def init_db():
         ("sentiment", "TEXT"),
         ("conviction", "INTEGER"),
         ("price_target", "TEXT"),
-        ("horizon", "TEXT")
+        ("horizon", "TEXT"),
+        ("recommended_action", "TEXT")
     ]
     
     for col_name, col_type in new_columns:
@@ -66,6 +68,19 @@ def init_db():
     CREATE TABLE IF NOT EXISTS scanned_urls (
         url TEXT PRIMARY KEY,
         timestamp TEXT NOT NULL
+    )
+    ''')
+    
+    # Create raw_news table for Agent 1 (Harvester) to dump articles into
+    cursor.execute('''
+    CREATE TABLE IF NOT EXISTS raw_news (
+        id TEXT PRIMARY KEY,
+        ticker TEXT,
+        headline TEXT NOT NULL,
+        summary TEXT,
+        url TEXT NOT NULL,
+        timestamp TEXT NOT NULL,
+        status TEXT NOT NULL DEFAULT 'PENDING'
     )
     ''')
     

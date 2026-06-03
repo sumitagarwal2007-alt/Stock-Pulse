@@ -5,6 +5,7 @@ import urllib.request
 import urllib.parse
 from datetime import datetime, timezone, timedelta
 import subprocess
+import time
 
 BASE_DIR = os.path.dirname(os.path.abspath(__file__))
 CONFIG_PATH = os.path.join(BASE_DIR, 'config.json')
@@ -23,15 +24,12 @@ def send_notification(title, text, ntfy_topic=None):
             req = urllib.request.Request(
                 f"https://ntfy.sh/{urllib.parse.quote(ntfy_topic)}",
                 data=text.encode('utf-8'),
-                headers={
-                    "Title": title.encode('utf-8'),
-                    "Tags": "moneybag,chart_with_upwards_trend"
-                },
+                headers={"Title": title.encode('utf-8'), "Tags": "moneybag,chart_with_upwards_trend"},
                 method="POST"
             )
             urllib.request.urlopen(req, timeout=5)
-        except Exception as e:
-            print(f"Failed to send ntfy push: {e}")
+        except:
+            pass
 
 def get_current_price(ticker, finnhub_key):
     if not finnhub_key:
@@ -43,7 +41,6 @@ def get_current_price(ticker, finnhub_key):
             data = json.loads(resp.read().decode())
             return data.get('c', 0.0)
     except Exception as e:
-        print(f"Error fetching price for {ticker}: {e}")
         return 0.0
 
 def summarize_with_gemini(portfolio_summary, gemini_key):
@@ -60,9 +57,7 @@ def summarize_with_gemini(portfolio_summary, gemini_key):
         f"Data: {json.dumps(portfolio_summary)}"
     )
     
-    payload = {
-        "contents": [{"parts": [{"text": prompt}]}]
-    }
+    payload = {"contents": [{"parts": [{"text": prompt}]}]}
     
     try_count = 0
     while try_count < 3:
@@ -74,40 +69,37 @@ def summarize_with_gemini(portfolio_summary, gemini_key):
                     return data['candidates'][0]['content']['parts'][0]['text'].strip()
         except urllib.error.HTTPError as e:
             if e.code == 429:
-                print("⏳ Gemini Rate Limit Hit during analysis. Waiting 30s...")
-                import time
                 time.sleep(30)
                 try_count += 1
             else:
-                print(f"Gemini API Error: {e}")
                 break
-        except Exception as e:
-            print(f"Gemini API Error: {e}")
+        except:
             break
             
     return "Daily Analysis Complete. Total P&L computed."
 
-def run_daily_analysis():
-    print("==============================================")
-    print("📈 Running MarketOracle Daily Analysis")
-    print("==============================================")
+def run_overseer(trigger_daily_report=False):
+    current_time = datetime.now().strftime("%I:%M:%S %p")
+    print(f"\n[{current_time}] 👔 Agent 4 (Overseer) checking risk on open positions...", flush=True)
     
     try:
         with open(CONFIG_PATH, 'r') as f:
             config = json.load(f)
-    except Exception as e:
-        print("❌ Could not read config.json.")
+    except:
         return
         
     finnhub_key = config.get("finnhub_api_key")
     gemini_key = config.get("gemini_api_key")
     ntfy_topic = config.get("ntfy_topic")
     
-    conn = sqlite3.connect(DB_PATH)
-    cursor = conn.cursor()
-    
-    cursor.execute("SELECT trade_id, ticker, price, shares, timestamp FROM paper_trades WHERE status = 'OPEN'")
-    open_trades = cursor.fetchall()
+    try:
+        conn = sqlite3.connect(DB_PATH)
+        cursor = conn.cursor()
+        cursor.execute("SELECT trade_id, ticker, price, shares, timestamp FROM paper_trades WHERE status = 'OPEN'")
+        open_trades = cursor.fetchall()
+    except Exception as e:
+        print(f"DB Error: {e}")
+        return
     
     portfolio_summary = {
         "total_closed_pnl": 0.0,
@@ -118,11 +110,9 @@ def run_daily_analysis():
     
     now = datetime.utcnow().replace(tzinfo=timezone.utc)
     
-    # Process Open Trades
     for trade in open_trades:
         trade_id, ticker, entry_price, shares, timestamp_str = trade
         
-        # Parse timestamp safely
         try:
             if timestamp_str.endswith("Z"):
                 timestamp_str = timestamp_str[:-1]
@@ -139,7 +129,6 @@ def run_daily_analysis():
         unrealized_pnl = (current_price - entry_price) * shares
         percent_change = ((current_price - entry_price) / entry_price) * 100
         
-        # Trading Rules: Take Profit 10%, Stop Loss -5%, or Hold > 7 Days
         should_sell = False
         reason = ""
         
@@ -166,7 +155,8 @@ def run_daily_analysis():
                 "pnl": round(unrealized_pnl, 2),
                 "return_pct": round(percent_change, 2)
             })
-            print(f"💰 SOLD {ticker} | {reason} | P&L: ${unrealized_pnl:.2f}")
+            print(f"💰 OVERSEER SOLD {ticker} | {reason} | P&L: ${unrealized_pnl:.2f}")
+            send_notification(ticker, f"MOCK SELL Executed: {ticker}\n{reason}\nP&L: ${unrealized_pnl:.2f}", ntfy_topic)
         else:
             portfolio_summary["open_positions"].append({
                 "ticker": ticker,
@@ -177,24 +167,37 @@ def run_daily_analysis():
             
     conn.commit()
     
-    # Get total historical realized PNL
-    cursor.execute("SELECT sum(pnl) FROM paper_trades WHERE status = 'CLOSED'")
-    row = cursor.fetchone()
-    if row and row[0]:
-        portfolio_summary["total_closed_pnl"] = round(row[0], 2)
+    if trigger_daily_report:
+        cursor.execute("SELECT sum(pnl) FROM paper_trades WHERE status = 'CLOSED'")
+        row = cursor.fetchone()
+        if row and row[0]:
+            portfolio_summary["total_closed_pnl"] = round(row[0], 2)
+            
+        portfolio_summary["total_unrealized_pnl"] = round(portfolio_summary["total_unrealized_pnl"], 2)
+        print("🤖 Overseer generating daily EOD report...", flush=True)
+        summary_text = summarize_with_gemini(portfolio_summary, gemini_key)
+        send_notification("Daily AI Portfolio Update", summary_text, ntfy_topic)
+        print("✅ Daily report sent.")
         
-    portfolio_summary["total_unrealized_pnl"] = round(portfolio_summary["total_unrealized_pnl"], 2)
-    
     conn.close()
-    
-    # Generate AI Summary
-    print("🤖 Generating AI Summary...")
-    summary_text = summarize_with_gemini(portfolio_summary, gemini_key)
-    
-    # Send Notification
-    title = f"Daily AI Portfolio Update"
-    send_notification(title, summary_text, ntfy_topic)
-    print("✅ Daily Analysis Complete and Notification Sent.")
-    
+
 if __name__ == "__main__":
-    run_daily_analysis()
+    print("==============================================")
+    print("👔 Agent 4: The Overseer Started")
+    print("==============================================", flush=True)
+    
+    last_report_date = None
+    
+    while True:
+        now_local = datetime.now()
+        
+        # Trigger daily report at 4:30 PM local time
+        trigger_report = False
+        if now_local.hour == 16 and now_local.minute >= 30:
+            current_date = now_local.strftime("%Y-%m-%d")
+            if last_report_date != current_date:
+                trigger_report = True
+                last_report_date = current_date
+                
+        run_overseer(trigger_daily_report=trigger_report)
+        time.sleep(15 * 60) # Overseer checks positions every 15 minutes
