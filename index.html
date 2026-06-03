@@ -41,6 +41,7 @@
         <div style="display: flex; gap: 8px; margin-right: 16px; background: rgba(0,0,0,0.2); padding: 4px; border-radius: 8px;">
           <button id="tab-dashboard" class="settings-btn" style="color: var(--text-primary); font-size: 12px; font-weight: bold; background: rgba(255,255,255,0.1);">Dashboard</button>
           <button id="tab-heatmap" class="settings-btn" style="color: var(--text-secondary); font-size: 12px; font-weight: bold;">Heatmap</button>
+          <button id="tab-portfolio" class="settings-btn" style="color: var(--text-secondary); font-size: 12px; font-weight: bold;">Briefcase 💼</button>
         </div>
         
         <button id="alerts-btn" class="settings-btn" title="Smart Alerts" style="margin-right: var(--space-2); color: var(--semantic-danger);">
@@ -169,13 +170,39 @@
     
     <!-- Heatmap View (Initially Hidden) -->
     <main id="heatmap-view" class="app-content animate-fade-in-up" style="display: none; padding: var(--space-5);">
-      <div style="max-width: 1200px; margin: 0 auto; width: 100%;">
-        <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: var(--space-4);">
-          <h2 style="font-size: 24px; font-weight: bold; margin: 0;">Macro Sector Heatmap</h2>
-          <div style="font-size: 14px; color: var(--text-secondary);">Real-time AI Sentiment Aggregation</div>
-        </div>
-        
+      <div class="heatmap-container">
+        <h2 style="margin-bottom: var(--space-4); color: var(--text-primary); border-bottom: 1px solid var(--border-subtle); padding-bottom: var(--space-2);">S&P 500 Sentiment Heatmap</h2>
         <div id="heatmap-grid" style="display: grid; grid-template-columns: repeat(auto-fill, minmax(280px, 1fr)); gap: var(--space-4);">
+          <!-- Populated by JS -->
+        </div>
+      </div>
+    </main>
+
+    <!-- Portfolio View -->
+    <main id="portfolio-view" class="app-content animate-fade-in-up" style="display: none; padding: var(--space-5);">
+      <div style="max-width: 1200px; margin: 0 auto; width: 100%;">
+        <h2 style="margin-bottom: var(--space-4); color: var(--text-primary); border-bottom: 1px solid var(--border-subtle); padding-bottom: var(--space-2);">AI Paper Portfolio (Briefcase)</h2>
+        
+        <div class="stats-bar" style="margin-bottom: var(--space-5);">
+          <div class="stat-card">
+            <div class="stat-card__label">Total Invested</div>
+            <div class="stat-card__value" id="portfolio-invested">$0.00</div>
+          </div>
+          <div class="stat-card">
+            <div class="stat-card__label">Current Balance</div>
+            <div class="stat-card__value" id="portfolio-balance">$0.00</div>
+          </div>
+          <div class="stat-card">
+            <div class="stat-card__label">Unrealized P&L</div>
+            <div class="stat-card__value" id="portfolio-unrealized-pnl">$0.00</div>
+          </div>
+          <div class="stat-card">
+            <div class="stat-card__label">Realized P&L</div>
+            <div class="stat-card__value" id="portfolio-realized-pnl">$0.00</div>
+          </div>
+        </div>
+
+        <div id="portfolio-list" style="display: flex; flex-direction: column; gap: var(--space-3);">
           <!-- Populated by JS -->
         </div>
       </div>

@@ -49,7 +49,10 @@ class App {
     // Tabs
     this.tabDashboard = document.getElementById('tab-dashboard');
     this.tabHeatmap = document.getElementById('tab-heatmap');
-    this.viewDashboard = document.querySelector('.app-content:not(#heatmap-view)');
+    this.tabPortfolio = document.getElementById('tab-portfolio');
+    this.viewDashboard = document.querySelector('.app-content:not(#heatmap-view):not(#portfolio-view)');
+    this.viewHeatmap = document.getElementById('heatmap-view');
+    this.viewPortfolio = document.getElementById('portfolio-view');
     this.viewHeatmap = document.getElementById('heatmap-view');
     this.heatmap = null;
   }
@@ -206,32 +209,42 @@ class App {
     }
 
     // Tabs Logic
-    if (this.tabDashboard && this.tabHeatmap) {
+    if (this.tabDashboard && this.tabHeatmap && this.tabPortfolio) {
+      const resetTabs = () => {
+        [this.tabDashboard, this.tabHeatmap, this.tabPortfolio].forEach(t => {
+          t.style.background = 'transparent';
+          t.style.color = 'var(--text-secondary)';
+        });
+        [this.viewDashboard, this.viewHeatmap, this.viewPortfolio].forEach(v => {
+          if(v) v.style.display = 'none';
+        });
+      };
+
       this.tabDashboard.addEventListener('click', () => {
+        resetTabs();
         this.tabDashboard.style.background = 'rgba(255,255,255,0.1)';
         this.tabDashboard.style.color = 'var(--text-primary)';
-        this.tabHeatmap.style.background = 'transparent';
-        this.tabHeatmap.style.color = 'var(--text-secondary)';
-        
-        this.viewDashboard.style.display = 'flex';
-        this.viewHeatmap.style.display = 'none';
+        if(this.viewDashboard) this.viewDashboard.style.display = 'flex';
       });
       
       this.tabHeatmap.addEventListener('click', () => {
+        resetTabs();
         this.tabHeatmap.style.background = 'rgba(255,255,255,0.1)';
         this.tabHeatmap.style.color = 'var(--text-primary)';
-        this.tabDashboard.style.background = 'transparent';
-        this.tabDashboard.style.color = 'var(--text-secondary)';
+        if(this.viewHeatmap) this.viewHeatmap.style.display = 'block';
         
-        this.viewDashboard.style.display = 'none';
-        this.viewHeatmap.style.display = 'block';
-        
-        // Force heatmap render
         if (this.heatmap) {
           const allStocks = window.StockData.getAllStocks();
           const mentions = window.MentionData.getAllMentions();
           this.heatmap.render(allStocks, mentions, this.rankings);
         }
+      });
+      
+      this.tabPortfolio.addEventListener('click', () => {
+        resetTabs();
+        this.tabPortfolio.style.background = 'rgba(255,255,255,0.1)';
+        this.tabPortfolio.style.color = 'var(--text-primary)';
+        if(this.viewPortfolio) this.viewPortfolio.style.display = 'block';
       });
     }
 
@@ -497,17 +510,16 @@ class App {
       
       const testStock = window.StockData.getStockByTicker('TSLA');
       // We check the browser console flag to see if we fell back
-      // If we did fallback, prices.length won't be 0, but we can notify the user that we are using fallback.
-      if (!window.finnhubApi.hasApiKey()) {
-         // handled above
-      } else {
-        // If an API key is provided but data failed, the console.warns in stocks.js fired.
-        // We can just render the fallback data without annoying the user with an alert every time.
+      } catch (e) { console.warn("Failed to fetch rankings"); }
+
+      // Safe isolated load for portfolio
+      try {
+        await this.loadPortfolio();
+      } catch (e) {
+        console.warn("Portfolio failed to load, continuing without it.", e);
       }
       
       this.render();
-      
-      // Initially subscribe to the default stock
       window.finnhubApi.subscribe(this.selectedTicker);
       
     } catch (e) {
@@ -516,6 +528,102 @@ class App {
     } finally {
       this.loadingOverlay.style.display = 'none';
     }
+  }
+
+  async loadPortfolio() {
+    try {
+      const resp = await fetch('/api/portfolio');
+      if (!resp.ok) return;
+      const trades = await resp.json();
+      this.renderPortfolio(trades);
+    } catch (e) {
+      console.warn("Failed to load portfolio data", e);
+    }
+  }
+
+  renderPortfolio(trades) {
+    let totalInvested = 0;
+    let currentBalance = 0;
+    let realizedPnl = 0;
+    let unrealizedPnl = 0;
+
+    const listEl = document.getElementById('portfolio-list');
+    if (!listEl) return;
+    listEl.innerHTML = '';
+
+    if (trades.length === 0) {
+      listEl.innerHTML = '<div style="color: var(--text-secondary); text-align: center; padding: 40px;">No AI trades have been executed yet.</div>';
+    }
+
+    trades.forEach(t => {
+      const liveData = window.StockData.getLatestPrice(t.ticker);
+      const currentPrice = liveData ? liveData.close : t.price;
+      
+      if (t.status === 'OPEN') {
+        const invested = t.shares * t.price;
+        const currentVal = t.shares * currentPrice;
+        totalInvested += invested;
+        currentBalance += currentVal;
+        
+        const openPnl = currentVal - invested;
+        if (t.action === 'BUY') {
+          unrealizedPnl += openPnl;
+        } else {
+          unrealizedPnl -= openPnl; // Short
+        }
+      } else {
+        realizedPnl += (t.pnl || 0);
+      }
+
+      // Render Card
+      const isUp = t.status === 'OPEN' ? (currentPrice >= t.price) : ((t.pnl || 0) >= 0);
+      const colorClass = isUp ? 'stock-card__change--up' : 'stock-card__change--down';
+      const arrow = isUp ? '↑' : '↓';
+      
+      const pnlDisplay = t.status === 'OPEN' 
+        ? `${arrow} $${Math.abs((currentPrice - t.price) * t.shares).toFixed(2)}`
+        : `${arrow} $${Math.abs(t.pnl || 0).toFixed(2)}`;
+
+      const html = `
+        <div class="glass-card" style="display: flex; flex-direction: column; gap: 12px; padding: 16px;">
+          <div style="display: flex; justify-content: space-between; align-items: flex-start;">
+            <div>
+              <div style="font-weight: bold; font-size: 18px; color: var(--text-primary);">
+                <span style="color: ${t.action === 'BUY' ? 'var(--semantic-success)' : 'var(--semantic-danger)'}; font-size: 14px; margin-right: 8px;">${t.action}</span>
+                ${t.ticker}
+              </div>
+              <div style="font-size: 12px; color: var(--text-secondary); margin-top: 4px;">
+                ${t.shares} shares @ $${t.price.toFixed(2)} &nbsp;&bull;&nbsp; ${new Date(t.timestamp).toLocaleString()}
+              </div>
+            </div>
+            <div style="text-align: right;">
+              <div style="font-size: 12px; color: var(--text-secondary); border: 1px solid var(--border-subtle); padding: 2px 6px; border-radius: 4px; display: inline-block; margin-bottom: 4px;">${t.status}</div>
+              <div class="chart-header__change ${colorClass}" style="font-size: 16px;">${pnlDisplay}</div>
+            </div>
+          </div>
+          
+          <div style="background: rgba(0,0,0,0.2); border-left: 3px solid var(--accent-primary); padding: 12px; border-radius: 4px;">
+            <div style="font-size: 10px; text-transform: uppercase; color: var(--text-secondary); font-weight: bold; margin-bottom: 4px;">AI Rationale</div>
+            <div style="color: var(--text-primary); font-size: 14px; line-height: 1.4;">${t.headline || 'Technical Catalyst'}</div>
+            <div style="color: var(--accent-primary); font-size: 12px; margin-top: 8px;">Prediction: ${t.prediction || 'N/A'}</div>
+          </div>
+        </div>
+      `;
+      listEl.innerHTML += html;
+    });
+
+    const f = (val) => '$' + Math.abs(val).toLocaleString(undefined, {minimumFractionDigits: 2, maximumFractionDigits: 2});
+    
+    document.getElementById('portfolio-invested').innerText = f(totalInvested);
+    document.getElementById('portfolio-balance').innerText = f(currentBalance);
+    
+    const unPnlEl = document.getElementById('portfolio-unrealized-pnl');
+    unPnlEl.innerText = (unrealizedPnl >= 0 ? '+' : '-') + f(unrealizedPnl);
+    unPnlEl.className = `stat-card__value ${unrealizedPnl >= 0 ? 'stock-card__change--up' : 'stock-card__change--down'}`;
+    
+    const realPnlEl = document.getElementById('portfolio-realized-pnl');
+    realPnlEl.innerText = (realizedPnl >= 0 ? '+' : '-') + f(realizedPnl);
+    realPnlEl.className = `stat-card__value ${realizedPnl >= 0 ? 'stock-card__change--up' : 'stock-card__change--down'}`;
   }
 
   render() {

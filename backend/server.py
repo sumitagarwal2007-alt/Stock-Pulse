@@ -81,6 +81,46 @@ class APIHandler(SimpleHTTPRequestHandler):
             except Exception as e:
                 self.wfile.write(json.dumps({"error": str(e)}).encode())
             return
+            
+        if self.path == '/api/portfolio':
+            self.send_response(200)
+            self.send_header('Content-type', 'application/json')
+            self.end_headers()
+            try:
+                conn = sqlite3.connect(DB_PATH)
+                cursor = conn.cursor()
+                cursor.execute("""
+                    SELECT pt.trade_id, pt.ticker, pt.action, pt.price, pt.shares, 
+                           pt.timestamp, pt.status, pt.close_price, pt.close_timestamp, 
+                           pt.pnl, pt.alert_id, a.prediction, a.headline
+                    FROM paper_trades pt 
+                    LEFT JOIN alerts a ON pt.alert_id = a.id 
+                    ORDER BY pt.timestamp DESC
+                """)
+                rows = cursor.fetchall()
+                conn.close()
+                
+                trades = []
+                for row in rows:
+                    trades.append({
+                        "trade_id": row[0],
+                        "ticker": row[1],
+                        "action": row[2],
+                        "price": row[3],
+                        "shares": row[4],
+                        "timestamp": row[5],
+                        "status": row[6],
+                        "close_price": row[7],
+                        "close_timestamp": row[8],
+                        "pnl": row[9],
+                        "alert_id": row[10],
+                        "prediction": row[11],
+                        "headline": row[12]
+                    })
+                self.wfile.write(json.dumps(trades).encode())
+            except Exception as e:
+                self.wfile.write(json.dumps({"error": str(e)}).encode())
+            return
         
         super().do_GET()
 
