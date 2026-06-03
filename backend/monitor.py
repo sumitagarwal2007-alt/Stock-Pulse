@@ -120,7 +120,11 @@ def run_monitor():
     try:
         conn = sqlite3.connect(DB_PATH)
         cursor = conn.cursor()
-        cursor.execute("SELECT url FROM alerts ORDER BY timestamp DESC LIMIT 200")
+        
+        # Make sure scanned_urls exists just in case
+        cursor.execute('''CREATE TABLE IF NOT EXISTS scanned_urls (url TEXT PRIMARY KEY, timestamp TEXT NOT NULL)''')
+        
+        cursor.execute("SELECT url FROM scanned_urls")
         processed_urls = {row[0] for row in cursor.fetchall()}
     except Exception as e:
         print(f"Error reading from SQLite: {e}")
@@ -173,7 +177,12 @@ def run_monitor():
             
         if not analysis_results:
             processed_urls.add(article_url)
-            time.sleep(5)
+            try:
+                cursor.execute("INSERT OR IGNORE INTO scanned_urls (url, timestamp) VALUES (?, ?)", (article_url, datetime.utcnow().isoformat() + "Z"))
+                conn.commit()
+            except:
+                pass
+            time.sleep(1) # Tiny sleep just to be safe
             continue
 
         for analysis in analysis_results:
@@ -245,6 +254,12 @@ def run_monitor():
                 send_notification(ticker, f"MOCK BUY Executed: $1000 at ${alert_price} | {analysis.get('prediction', '')}\n\n{headline}", config.get("ntfy_topic"))
                 
         processed_urls.add(article_url)
+        try:
+            cursor.execute("INSERT OR IGNORE INTO scanned_urls (url, timestamp) VALUES (?, ?)", (article_url, datetime.utcnow().isoformat() + "Z"))
+            conn.commit()
+        except:
+            pass
+            
         # Protect Gemini Free Tier Rate Limits (15 RPM -> 1 request every 4 seconds)
         time.sleep(5)
         

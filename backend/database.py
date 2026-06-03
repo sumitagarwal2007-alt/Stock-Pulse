@@ -43,6 +43,14 @@ def init_db():
     )
     ''')
     
+    # Create scanned_urls table to prevent re-scanning non-catalyst news
+    cursor.execute('''
+    CREATE TABLE IF NOT EXISTS scanned_urls (
+        url TEXT PRIMARY KEY,
+        timestamp TEXT NOT NULL
+    )
+    ''')
+    
     conn.commit()
     return conn
 
