@@ -60,44 +60,45 @@ def analyze_catalyst_with_gemini(headline, summary, gemini_key):
         "contents": [{"parts": [{"text": prompt}]}]
     }
     
-    try:
-        req = urllib.request.Request(url, data=json.dumps(payload).encode('utf-8'), headers={'Content-Type': 'application/json'}, method='POST')
-        with urllib.request.urlopen(req) as response:
-            if response.getcode() == 200:
-                text_resp = response.read().decode()
-                data = json.loads(text_resp)
-                text_resp = data['candidates'][0]['content']['parts'][0]['text']
-                
-                # Clean up markdown JSON blocks if present
-                clean_text = text_resp.replace('```json', '').replace('```', '').strip()
-                
-                # If Gemini forgot to wrap multiple objects in an array, fix it
-                if clean_text.startswith('{') and clean_text.endswith('}') and '},' in clean_text:
-                    clean_text = f"[{clean_text}]"
+    import time
+    try_count = 0
+    while try_count < 3:
+        try:
+            req = urllib.request.Request(url, data=json.dumps(payload).encode('utf-8'), headers={'Content-Type': 'application/json'}, method='POST')
+            with urllib.request.urlopen(req) as response:
+                if response.getcode() == 200:
+                    text_resp = response.read().decode()
+                    data = json.loads(text_resp)
+                    text_resp = data['candidates'][0]['content']['parts'][0]['text']
                     
-                try:
-                    result = json.loads(clean_text)
-                except Exception as parse_err:
-                    print(f"JSON Parse Error: {parse_err}")
-                    print(f"Raw text was: {clean_text}")
-                    return []
-
-                if isinstance(result, list):
-                    return result
-                elif isinstance(result, dict) and result.get("isCatalyst"):
-                    return [result]
+                    clean_text = text_resp.replace('```json', '').replace('```', '').strip()
+                    
+                    if clean_text.startswith('{') and clean_text.endswith('}') and '},' in clean_text:
+                        clean_text = f"[{clean_text}]"
+                        
+                    try:
+                        result = json.loads(clean_text)
+                    except Exception as parse_err:
+                        return []
+    
+                    if isinstance(result, list):
+                        return result
+                    elif isinstance(result, dict) and result.get("isCatalyst"):
+                        return [result]
+                    else:
+                        return []
                 else:
                     return []
+        except urllib.error.HTTPError as e:
+            if e.code == 429:
+                try_count += 1
+                time.sleep(30) # Wait 30 seconds before retrying
             else:
                 return []
-    except urllib.error.HTTPError as e:
-        print(f"Gemini API Error: HTTP Error {e.code}: {e.reason}")
-        if e.code == 429:
-            return "RATE_LIMIT"
-        return []
-    except Exception as e:
-        print(f"Gemini API Error: {e}")
-        return []
+        except Exception as e:
+            return []
+            
+    return "RATE_LIMIT"
 
 def run_monitor():
     current_time = datetime.now().strftime("%I:%M:%S %p")
@@ -167,8 +168,7 @@ def run_monitor():
         analysis_results = analyze_catalyst_with_gemini(headline, summary, config.get("gemini_api_key"))
         
         if analysis_results == "RATE_LIMIT":
-            print("⏳ Rate Limit Hit! Cooling down for 60 seconds...")
-            time.sleep(60)
+            print("⏳ Rate Limit Hit severely! Skipping remaining articles for this cycle...")
             break
             
         if not analysis_results:
