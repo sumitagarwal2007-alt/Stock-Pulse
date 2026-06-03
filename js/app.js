@@ -537,11 +537,17 @@ class App {
       this.render();
       window.finnhubApi.subscribe(this.selectedTicker);
       
+      // Data loaded successfully! Hide the spinner.
+      this.loadingOverlay.style.display = 'none';
+      
     } catch (e) {
       console.error('Error loading data', e);
-      alert('Failed to load data. Please check your API key or try again later.');
-    } finally {
-      this.loadingOverlay.style.display = 'none';
+      const statusText = document.querySelector('#loading-overlay div:nth-child(2)');
+      if(statusText) {
+        statusText.style.color = 'var(--semantic-danger)';
+        statusText.innerText = 'ERROR: ' + e.message + '\n' + e.stack;
+      }
+      // Do NOT hide the overlay on error so the user can read it
     }
   }
 
