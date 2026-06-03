@@ -524,8 +524,6 @@ class App {
       } catch (e) { }
       
       const testStock = window.StockData.getStockByTicker('TSLA');
-      // We check the browser console flag to see if we fell back
-      } catch (e) { console.warn("Failed to fetch rankings"); }
 
       // Safe isolated load for portfolio
       try {
