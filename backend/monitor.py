@@ -48,13 +48,11 @@ def analyze_catalyst_with_gemini(headline, summary, gemini_key):
     prompt = (
         "You are a quantitative AI analyst. Read the following news headline and summary. "
         "Identify ALL publicly traded companies mentioned or implicitly affected. "
-        "Specifically look for 'sympathy plays', executive endorsements, or supply chain dependencies "
-        "(e.g., if Nvidia's CEO endorses Marvell, Marvell is impacted). "
-        "For EACH impacted company, determine if the news is a major market-moving catalyst (High impact). "
+        "Identify ANY market-moving event, sentiment shift, or momentum driver (it does not need to be a massive catalyst, even minor news is okay). "
         "Return EXACTLY a JSON array of objects. Do not include markdown formatting. "
-        "If there are no catalysts, return []. "
+        "If no companies are affected, return []. "
         "Format for each object: "
-        "{\"ticker\": \"<TICKER>\", \"isCatalyst\": true, \"keyword\": \"<1-3 word catalyst reason>\", \"impact\": \"High\", \"prediction\": \"<1 sentence Bull/Bear thesis prediction on stock price momentum>\"} "
+        "{\"ticker\": \"<TICKER>\", \"isCatalyst\": true, \"keyword\": \"<1-3 word reason>\", \"impact\": \"<High/Medium/Low>\", \"prediction\": \"<1 sentence Bull/Bear thesis prediction on stock price momentum>\"} "
         f"Headline: {headline} | Summary: {summary}"
     )
     
@@ -133,7 +131,10 @@ def run_monitor():
     # 3. Google News RSS Autonomous Search
     queries = [
         "stock market catalyst",
-        "CEO endorsement OR acquisition rumor"
+        "CEO endorsement OR acquisition rumor",
+        "stock price target upgrade",
+        "earnings beat stock surge",
+        "new product launch tech stock"
     ]
     
     recent_news = []
