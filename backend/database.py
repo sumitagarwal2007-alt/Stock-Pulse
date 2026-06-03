@@ -22,9 +22,27 @@ def init_db():
         keyword TEXT,
         impact TEXT,
         prediction TEXT,
-        alert_price REAL
+        alert_price REAL,
+        sentiment TEXT,
+        conviction INTEGER,
+        price_target TEXT,
+        horizon TEXT
     )
     ''')
+    
+    # Safely run ALTER TABLE for existing databases
+    new_columns = [
+        ("sentiment", "TEXT"),
+        ("conviction", "INTEGER"),
+        ("price_target", "TEXT"),
+        ("horizon", "TEXT")
+    ]
+    
+    for col_name, col_type in new_columns:
+        try:
+            cursor.execute(f"ALTER TABLE alerts ADD COLUMN {col_name} {col_type}")
+        except sqlite3.OperationalError:
+            pass # Column already exists
     
     # Create paper trades table for mock trading
     cursor.execute('''

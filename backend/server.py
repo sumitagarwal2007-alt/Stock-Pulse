@@ -55,7 +55,7 @@ class APIHandler(SimpleHTTPRequestHandler):
             try:
                 conn = sqlite3.connect(DB_PATH)
                 cursor = conn.cursor()
-                cursor.execute("SELECT id, ticker, timestamp, date, headline, url, keyword, impact, prediction, alert_price FROM alerts ORDER BY timestamp DESC LIMIT 100")
+                cursor.execute("SELECT id, ticker, timestamp, date, headline, url, keyword, impact, prediction, alert_price, sentiment, conviction, price_target, horizon FROM alerts ORDER BY timestamp DESC LIMIT 100")
                 rows = cursor.fetchall()
                 conn.close()
                 
@@ -71,7 +71,11 @@ class APIHandler(SimpleHTTPRequestHandler):
                         "keyword": row[6],
                         "impact": row[7],
                         "prediction": row[8],
-                        "alert_price": row[9]
+                        "alert_price": row[9],
+                        "sentiment": row[10],
+                        "conviction": row[11],
+                        "price_target": row[12],
+                        "horizon": row[13]
                     })
                 self.wfile.write(json.dumps(alerts).encode())
             except Exception as e:

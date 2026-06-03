@@ -376,17 +376,40 @@ class App {
           `;
         }
 
+        let sentimentColor = 'var(--text-secondary)';
+        if (alert.sentiment === 'Bullish') sentimentColor = 'var(--semantic-success)';
+        if (alert.sentiment === 'Bearish') sentimentColor = 'var(--semantic-danger)';
+
         html += `
         <div style="background: rgba(255,255,255,0.05); padding: var(--space-3); border-radius: 8px; margin-bottom: var(--space-3); border-left: 4px solid var(--semantic-${alert.impact === 'High' ? 'danger' : 'warning'});">
           <div style="display: flex; justify-content: space-between; margin-bottom: 8px;">
             <strong style="color: var(--text-primary); font-size: 16px;">${alert.ticker} • <span style="text-transform: uppercase;">${alert.keyword}</span></strong>
             <span style="font-size: 12px; color: var(--text-tertiary);">${new Date(alert.timestamp).toLocaleString()}</span>
           </div>
-          <div style="font-size: 14px; margin-bottom: 8px; color: var(--text-secondary);">
+          <div style="font-size: 14px; margin-bottom: 12px; color: var(--text-secondary);">
             ${alert.headline}
           </div>
+          
+          <div style="display: grid; grid-template-columns: 1fr 1fr; gap: 8px; margin-bottom: 12px; background: rgba(0,0,0,0.2); padding: 8px; border-radius: 6px;">
+            <div style="font-size: 12px;">
+              <span style="color: var(--text-tertiary);">Sentiment:</span> <strong style="color: ${sentimentColor}">${alert.sentiment || 'Unknown'}</strong>
+            </div>
+            <div style="font-size: 12px;">
+              <span style="color: var(--text-tertiary);">Price Target:</span> <strong>${alert.price_target || 'N/A'}</strong>
+            </div>
+            <div style="font-size: 12px;">
+              <span style="color: var(--text-tertiary);">Horizon:</span> <strong>${alert.horizon || 'N/A'}</strong>
+            </div>
+            <div style="font-size: 12px; display: flex; align-items: center; gap: 6px;">
+              <span style="color: var(--text-tertiary);">Conviction:</span> <strong>${alert.conviction || 50}/100</strong>
+              <div style="flex-grow: 1; height: 6px; background: rgba(255,255,255,0.1); border-radius: 3px; overflow: hidden;">
+                <div style="height: 100%; width: ${alert.conviction || 50}%; background: ${(alert.conviction || 50) >= 70 ? 'var(--semantic-success)' : 'var(--accent-primary)'};"></div>
+              </div>
+            </div>
+          </div>
+          
           <div style="font-size: 13px; color: var(--accent-primary); font-weight: 500;">
-            🤖 AI Prediction: ${alert.prediction}
+            🤖 AI Thesis: ${alert.prediction}
           </div>
           ${validationHtml}
         </div>

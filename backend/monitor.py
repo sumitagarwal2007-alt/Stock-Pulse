@@ -46,13 +46,16 @@ def analyze_catalyst_with_gemini(headline, summary, gemini_key):
     url = f"https://generativelanguage.googleapis.com/v1beta/models/gemini-2.5-flash:generateContent?key={gemini_key}"
     
     prompt = (
-        "You are a quantitative AI analyst. Read the following news headline and summary. "
+        "You are a Senior Quantitative Analyst at a top AI Hedge Fund. Read the following news headline and summary. "
         "Identify ALL publicly traded companies mentioned or implicitly affected. "
-        "Identify ANY market-moving event, sentiment shift, or momentum driver (it does not need to be a massive catalyst, even minor news is okay). "
+        "Identify ANY market-moving event, sentiment shift, or momentum driver (even minor news is okay). "
         "Return EXACTLY a JSON array of objects. Do not include markdown formatting. "
         "If no companies are affected, return []. "
         "Format for each object: "
-        "{\"ticker\": \"<TICKER>\", \"isCatalyst\": true, \"keyword\": \"<1-3 word reason>\", \"impact\": \"<High/Medium/Low>\", \"prediction\": \"<1 sentence Bull/Bear thesis prediction on stock price momentum>\"} "
+        "{\"ticker\": \"<TICKER>\", \"isCatalyst\": true, \"keyword\": \"<1-3 word reason>\", \"impact\": \"<High/Medium/Low>\", "
+        "\"prediction\": \"<1 sentence Bull/Bear thesis prediction>\", \"sentiment\": \"<Bullish/Bearish/Neutral>\", "
+        "\"conviction\": <integer from 1 to 100 based on source reliability and historical weight>, "
+        "\"price_target\": \"<e.g. +5% to +10%>\", \"horizon\": \"<1-7 Days / 1-3 Months / 1 Year+>\"} "
         f"Headline: {headline} | Summary: {summary}"
     )
     
@@ -213,8 +216,8 @@ def run_monitor():
                 try:
                     cursor.execute('''
                     INSERT OR IGNORE INTO alerts 
-                    (id, ticker, timestamp, date, headline, url, keyword, impact, prediction, alert_price)
-                    VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+                    (id, ticker, timestamp, date, headline, url, keyword, impact, prediction, alert_price, sentiment, conviction, price_target, horizon)
+                    VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
                     ''', (
                         alert_id,
                         ticker,
@@ -225,11 +228,15 @@ def run_monitor():
                         keyword,
                         analysis.get('impact', 'High'),
                         analysis.get('prediction', ''),
-                        alert_price
+                        alert_price,
+                        analysis.get('sentiment', 'Neutral'),
+                        int(analysis.get('conviction', 50)),
+                        analysis.get('price_target', 'Unknown'),
+                        analysis.get('horizon', 'Unknown')
                     ))
                     
-                    # Execute Mock Trade (Budget: $1000 per trade)
-                    if alert_price and alert_price > 0:
+                    # Execute Mock Trade (Budget: $1000 per trade) - Only for High Conviction!
+                    if alert_price and alert_price > 0 and int(analysis.get('conviction', 0)) >= 70:
                         shares = 1000.0 / alert_price
                         cursor.execute('''
                         INSERT INTO paper_trades 
