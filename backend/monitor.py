@@ -2,27 +2,59 @@ import os
 import json
 import time
 import urllib.request
+import urllib.parse
+import xml.etree.ElementTree as ET
 import subprocess
-from datetime import datetime, timedelta
+import sqlite3
+from datetime import datetime, timedelta, timezone
 
 # Paths
 BASE_DIR = os.path.dirname(os.path.abspath(__file__))
 CONFIG_PATH = os.path.join(BASE_DIR, 'config.json')
-ALERTS_PATH = os.path.join(BASE_DIR, 'alerts.json')
+DB_PATH = os.path.join(BASE_DIR, 'market_data.db')
+
+def send_notification(title, text, ntfy_topic=None):
+    # Mac local notification
+    try:
+        text_safe = text.replace('"', '\\"')
+        title_safe = title.replace('"', '\\"')
+        subprocess.run(['osascript', '-e', f'display notification "{text_safe}" with title "{title_safe}"'])
+    except Exception:
+        pass
+        
+    # NTFY Push notification (iOS)
+    if ntfy_topic:
+        try:
+            req = urllib.request.Request(
+                f"https://ntfy.sh/{urllib.parse.quote(ntfy_topic)}",
+                data=text.encode('utf-8'),
+                headers={
+                    "Title": title.encode('utf-8'),
+                    "Tags": "chart_with_upwards_trend,rotating_light"
+                },
+                method="POST"
+            )
+            urllib.request.urlopen(req, timeout=5)
+        except Exception as e:
+            print(f"Failed to send ntfy push: {e}")
 
 def analyze_catalyst_with_gemini(headline, summary, gemini_key):
     """Scan text for catalytic events using Google Gemini 2.5 Flash"""
     if not gemini_key:
-        return {"isCatalyst": False}
+        return []
         
     url = f"https://generativelanguage.googleapis.com/v1beta/models/gemini-2.5-flash:generateContent?key={gemini_key}"
     
     prompt = (
         "You are a quantitative AI analyst. Read the following news headline and summary. "
-        "Determine if it is a major market-moving catalyst (High impact) for the stock. "
-        "If it is NOT a catalyst, return exactly: {\"isCatalyst\": false}. "
-        "If it IS a catalyst, return exactly a JSON object in this format: "
-        "{\"isCatalyst\": true, \"keyword\": \"<1-3 word catalyst reason>\", \"impact\": \"High\", \"prediction\": \"<1 sentence Bull/Bear thesis prediction on stock price momentum>\"}. "
+        "Identify ALL publicly traded companies mentioned or implicitly affected. "
+        "Specifically look for 'sympathy plays', executive endorsements, or supply chain dependencies "
+        "(e.g., if Nvidia's CEO endorses Marvell, Marvell is impacted). "
+        "For EACH impacted company, determine if the news is a major market-moving catalyst (High impact). "
+        "Return EXACTLY a JSON array of objects. Do not include markdown formatting. "
+        "If there are no catalysts, return []. "
+        "Format for each object: "
+        "{\"ticker\": \"<TICKER>\", \"isCatalyst\": true, \"keyword\": \"<1-3 word catalyst reason>\", \"impact\": \"High\", \"prediction\": \"<1 sentence Bull/Bear thesis prediction on stock price momentum>\"} "
         f"Headline: {headline} | Summary: {summary}"
     )
     
@@ -33,17 +65,41 @@ def analyze_catalyst_with_gemini(headline, summary, gemini_key):
     try:
         req = urllib.request.Request(url, data=json.dumps(payload).encode('utf-8'), headers={'Content-Type': 'application/json'}, method='POST')
         with urllib.request.urlopen(req) as response:
-            data = json.loads(response.read().decode())
-            text_resp = data['candidates'][0]['content']['parts'][0]['text']
-            
-            # Clean up markdown JSON blocks if present
-            clean_text = text_resp.replace('```json', '').replace('```', '').strip()
-            
-            result = json.loads(clean_text)
-            return result
+            if response.getcode() == 200:
+                text_resp = response.read().decode()
+                data = json.loads(text_resp)
+                text_resp = data['candidates'][0]['content']['parts'][0]['text']
+                
+                # Clean up markdown JSON blocks if present
+                clean_text = text_resp.replace('```json', '').replace('```', '').strip()
+                
+                # If Gemini forgot to wrap multiple objects in an array, fix it
+                if clean_text.startswith('{') and clean_text.endswith('}') and '},' in clean_text:
+                    clean_text = f"[{clean_text}]"
+                    
+                try:
+                    result = json.loads(clean_text)
+                except Exception as parse_err:
+                    print(f"JSON Parse Error: {parse_err}")
+                    print(f"Raw text was: {clean_text}")
+                    return []
+
+                if isinstance(result, list):
+                    return result
+                elif isinstance(result, dict) and result.get("isCatalyst"):
+                    return [result]
+                else:
+                    return []
+            else:
+                return []
+    except urllib.error.HTTPError as e:
+        print(f"Gemini API Error: HTTP Error {e.code}: {e.reason}")
+        if e.code == 429:
+            return "RATE_LIMIT"
+        return []
     except Exception as e:
         print(f"Gemini API Error: {e}")
-        return {"isCatalyst": False}
+        return []
 
 def run_monitor():
     current_time = datetime.now().strftime("%I:%M:%S %p")
@@ -57,62 +113,81 @@ def run_monitor():
         print("❌ Could not read config.json. Please ensure it exists.")
         return
 
-    if not config.get("finnhub_api_key") or config["finnhub_api_key"] == "YOUR_API_KEY_HERE":
-        print("❌ Missing API Key in backend/config.json")
+    if not config.get("gemini_api_key") or config["gemini_api_key"] == "YOUR_GEMINI_KEY":
+        print("❌ Missing Gemini API Key in backend/config.json")
         return
 
-    # 2. Read previous alerts
+    # 2. Read previous state from SQLite
     try:
-        if os.path.exists(ALERTS_PATH):
-            with open(ALERTS_PATH, 'r') as f:
-                content = f.read().strip()
-                previous_alerts = json.loads(content) if content else []
-        else:
-            previous_alerts = []
+        conn = sqlite3.connect(DB_PATH)
+        cursor = conn.cursor()
+        cursor.execute("SELECT url FROM alerts ORDER BY timestamp DESC LIMIT 200")
+        processed_urls = {row[0] for row in cursor.fetchall()}
     except Exception as e:
-        previous_alerts = []
-
-    processed_urls = {a.get('url') for a in previous_alerts if isinstance(a, dict)}
+        print(f"Error reading from SQLite: {e}")
+        processed_urls = set()
+        
     new_alerts_found = False
+    watchlist_updated = False
 
-    # 3. Scan General Market News (Trending)
-    url = f"https://finnhub.io/api/v1/news?category=general&token={config['finnhub_api_key']}"
+    # 3. Google News RSS Autonomous Search
+    queries = [
+        "stock market catalyst",
+        "CEO endorsement OR acquisition rumor"
+    ]
     
-    try:
-        req = urllib.request.Request(url, headers={'User-Agent': 'Mozilla/5.0'})
-        with urllib.request.urlopen(req) as response:
-            data = json.loads(response.read().decode())
+    recent_news = []
+    for query in queries:
+        encoded_query = urllib.parse.quote_plus(query)
+        url = f"https://news.google.com/rss/search?q={encoded_query}&hl=en-US&gl=US&ceid=US:en"
+        try:
+            req = urllib.request.Request(url, headers={'User-Agent': 'Mozilla/5.0'})
+            with urllib.request.urlopen(req) as response:
+                xml_data = response.read()
+                root = ET.fromstring(xml_data)
+                for item in root.findall('.//item')[:10]:
+                    title = item.find('title').text
+                    link = item.find('link').text
+                    if link not in processed_urls:
+                        recent_news.append({
+                            "headline": title,
+                            "summary": "",
+                            "url": link
+                        })
+        except Exception as e:
+            print(f"Error fetching Google News: {e}")
+
+    for article in recent_news:
+        article_url = article.get('url', '')
+        headline = article.get('headline', '')
+        summary = article.get('summary', '')
+        
+        analysis_results = analyze_catalyst_with_gemini(headline, summary, config.get("gemini_api_key"))
+        
+        if analysis_results == "RATE_LIMIT":
+            print("⏳ Rate Limit Hit! Cooling down for 60 seconds...")
+            time.sleep(60)
+            break
             
-        if isinstance(data, list):
-            # Check the latest 30 articles for any trending catalysts
-            recent_news = data[:30]
-            
-            for article in recent_news:
-                article_url = article.get('url', '')
-                if article_url in processed_urls:
-                    continue
+        if not analysis_results:
+            processed_urls.add(article_url)
+            time.sleep(5)
+            continue
+
+        for analysis in analysis_results:
+            if analysis and analysis.get('isCatalyst') and analysis.get('ticker'):
+                ticker = analysis['ticker'].upper()
+                keyword = analysis.get('keyword', 'UNKNOWN')
+                print(f"🚨 AUTONOMOUS CATALYST FOUND FOR {ticker}: {keyword}", flush=True)
                 
-                # Extract related ticker (Finnhub provides related symbols in general news)
-                related = article.get('related', '')
-                if not related: 
-                    continue
-                
-                # Some articles have multiple related, just grab the first one
-                ticker = related.split(',')[0].strip()
-                if not ticker:
-                    continue
-                    
-                headline = article.get('headline', '')
-                summary = article.get('summary', '')
-                
-                analysis = analyze_catalyst_with_gemini(headline, summary, config.get("gemini_api_key"))
-                
-                if analysis and analysis.get('isCatalyst'):
-                    keyword = analysis.get('keyword', 'UNKNOWN')
-                    print(f"🚨 TRENDING CATALYST FOUND FOR {ticker}: {keyword}", flush=True)
-                    
-                    # 4. Fetch Exact Live Quote to record Alert Price
-                    alert_price = 0.0
+                # Auto-Track Watchlist Injection
+                if ticker not in config.get('watchlist', []):
+                    config.setdefault('watchlist', []).append(ticker)
+                    watchlist_updated = True
+                    print(f"➕ Auto-tracking new ticker: {ticker}")
+                # 4. Fetch Exact Live Quote to record Alert Price
+                alert_price = 0.0
+                if config.get("finnhub_api_key"):
                     try:
                         quote_url = f"https://finnhub.io/api/v1/quote?symbol={ticker}&token={config['finnhub_api_key']}"
                         q_req = urllib.request.Request(quote_url, headers={'User-Agent': 'Mozilla/5.0'})
@@ -120,41 +195,51 @@ def run_monitor():
                             q_data = json.loads(q_resp.read().decode())
                             alert_price = q_data.get('c', 0.0)
                     except Exception as q_err:
-                        print(f"Failed to fetch live quote for {ticker}: {q_err}")
-                    
-                    alert_obj = {
-                        "id": str(int(time.time() * 1000)),
-                        "ticker": ticker,
-                        "timestamp": datetime.now().isoformat() + "Z",
-                        "date": datetime.now().strftime('%Y-%m-%d'),
-                        "headline": headline,
-                        "url": article_url,
-                        "keyword": keyword,
-                        "impact": analysis['impact'],
-                        "prediction": analysis['prediction'],
-                        "alert_price": alert_price
-                    }
-                    
-                    previous_alerts.insert(0, alert_obj)
-                    processed_urls.add(article_url)
+                        pass
+                        
+                # Insert into SQLite
+                try:
+                    cursor.execute('''
+                    INSERT OR IGNORE INTO alerts 
+                    (id, ticker, timestamp, date, headline, url, keyword, impact, prediction, alert_price)
+                    VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+                    ''', (
+                        str(int(time.time() * 1000)),
+                        ticker,
+                        datetime.utcnow().isoformat() + "Z",
+                        datetime.now().strftime('%Y-%m-%d'),
+                        headline,
+                        article_url,
+                        keyword,
+                        analysis.get('impact', 'High'),
+                        analysis.get('prediction', ''),
+                        alert_price
+                    ))
+                    conn.commit()
                     new_alerts_found = True
-                    
-                    send_mac_notification(ticker, f"${alert_price} | {analysis['prediction']}\n\n{headline}")
-                    
-                    time.sleep(1) # Rate limit protection when a catalyst is found
-                    
-    except Exception as e:
-        print(f"Error fetching general news: {e}")
-
-    # 5. Save to JSON if new alerts found
-    if new_alerts_found:
-        trimmed_alerts = previous_alerts[:100]
+                except Exception as e:
+                    print(f"Failed to insert alert into DB: {e}")
+                
+                send_notification(ticker, f"${alert_price} | {analysis.get('prediction', '')}\n\n{headline}", config.get("ntfy_topic"))
+                
+        processed_urls.add(article_url)
+        # Protect Gemini Free Tier Rate Limits (15 RPM -> 1 request every 4 seconds)
+        time.sleep(5)
+        
+    if watchlist_updated:
         try:
-            with open(ALERTS_PATH, 'w') as f:
-                json.dump(trimmed_alerts, f, indent=2)
-            print("✅ Saved new alerts to alerts.json", flush=True)
+            with open(CONFIG_PATH, 'w') as f:
+                json.dump(config, f, indent=2)
         except Exception as e:
-            print(f"Error saving alerts: {e}")
+            print(f"Error updating config: {e}")
+            
+    try:
+        conn.close()
+    except:
+        pass
+
+    if new_alerts_found:
+        print("✅ Saved new alerts to market_data.db", flush=True)
     else:
         print("💤 No new catalysts found.", flush=True)
 

@@ -27,12 +27,23 @@ class Dashboard {
   /**
    * Render the sidebar stock list
    */
-  renderSidebar(stocks, selectedTicker, timeframe = 15) {
+  renderSidebar(stocks, selectedTicker, timeframe = 15, rankings = {}) {
     if (!this.sidebarContainer) return;
     
-    const html = stocks.map(stock => {
+    // Sort stocks by ranking hit count (Autonomous AI hits)
+    const sortedStocks = [...stocks].sort((a, b) => {
+      const aHits = rankings[a.ticker] ? rankings[a.ticker].length : 0;
+      const bHits = rankings[b.ticker] ? rankings[b.ticker].length : 0;
+      return bHits - aHits; // Descending
+    });
+    
+    const html = sortedStocks.map(stock => {
       const latest = window.StockData.getLatestPrice(stock.ticker);
       const sentiment = window.MentionData.getAggregateSentiment(stock.ticker);
+      
+      // Inject hit count for rendering
+      stock._hits = rankings[stock.ticker] ? rankings[stock.ticker].length : 0;
+      
       return window.StockCard.render(stock, latest, sentiment, stock.ticker === selectedTicker, timeframe);
     }).join('');
     

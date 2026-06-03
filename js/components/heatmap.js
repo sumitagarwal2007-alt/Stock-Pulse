@@ -8,7 +8,7 @@ class SectorHeatmap {
     this.container = document.getElementById(containerId);
   }
 
-  render(stocks, mentions) {
+  render(stocks, mentions, rankings = {}) {
     if (!this.container) return;
 
     // Group stocks by sector
@@ -74,12 +74,23 @@ class SectorHeatmap {
         statusText = 'Bearish';
       }
       
+      // Sort constituents within sector by hit count, then by computed score
+      sector.stocks.sort((a, b) => {
+        const aHits = rankings[a.ticker] ? rankings[a.ticker].length : 0;
+        const bHits = rankings[b.ticker] ? rankings[b.ticker].length : 0;
+        if (bHits !== aHits) return bHits - aHits;
+        return b.computedScore - a.computedScore;
+      });
+
       const stockListHtml = sector.stocks.map(s => {
         const upIcon = s.computedScore > 55 ? '↑' : (s.computedScore < 45 ? '↓' : '–');
         const color = s.computedScore > 55 ? 'var(--semantic-success)' : (s.computedScore < 45 ? 'var(--semantic-danger)' : 'var(--text-tertiary)');
+        const hits = rankings[s.ticker] ? rankings[s.ticker].length : 0;
+        const hitIcon = hits > 0 ? `<span style="font-size: 10px; margin-left: 4px;" title="${hits} AI Catalyst Hits">🔥${hits}</span>` : '';
+        
         return `
           <div style="display: flex; justify-content: space-between; font-size: 13px; margin-top: 4px; color: var(--text-secondary);">
-            <span>${s.ticker}</span>
+            <span>${s.ticker} ${hitIcon}</span>
             <span style="color: ${color}; font-weight: bold;">${upIcon} ${Math.round(s.computedScore)}</span>
           </div>
         `;

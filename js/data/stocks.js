@@ -2,18 +2,19 @@
    StockPulse — Stock Data (Live via Finnhub)
    ============================================ */
 
-const STOCKS = [
-  { ticker: 'TSLA', name: 'Tesla, Inc.', sector: 'Automotive / Energy', logo: '⚡' },
-  { ticker: 'NVDA', name: 'NVIDIA Corporation', sector: 'Semiconductors', logo: '🟢' },
-  { ticker: 'AAPL', name: 'Apple Inc.', sector: 'Consumer Electronics', logo: '🍎' },
-  { ticker: 'MSFT', name: 'Microsoft Corporation', sector: 'Software / Cloud', logo: '🪟' },
-  { ticker: 'META', name: 'Meta Platforms, Inc.', sector: 'Social Media / VR', logo: '♾️' },
-  { ticker: 'GOOGL', name: 'Alphabet Inc.', sector: 'Internet / AI', logo: '🔍' },
-  { ticker: 'AMZN', name: 'Amazon.com, Inc.', sector: 'E-Commerce / Cloud', logo: '📦' },
-  { ticker: 'AMD', name: 'Advanced Micro Devices', sector: 'Semiconductors', logo: '🔴' },
-  { ticker: 'PLTR', name: 'Palantir Technologies', sector: 'AI / Defense', logo: '🛡️' },
-  { ticker: 'GME', name: 'GameStop Corp.', sector: 'Retail / Meme Stock', logo: '🎮' }
+let STOCKS = [
+  { ticker: 'TSLA', name: 'Tesla, Inc.', sector: 'Automotive / Energy', logo: '⚡' }
 ];
+
+function setStocksList(tickers) {
+  // Overwrite STOCKS array with basic objects based on tickers
+  STOCKS = tickers.map(t => ({
+    ticker: t,
+    name: t,
+    sector: 'Auto-Tracked',
+    logo: '📈'
+  }));
+}
 
 // Cache for API responses
 const priceCache = {};
@@ -222,7 +223,8 @@ function getLatestPrice(ticker) {
 
 if (typeof window !== 'undefined') {
   window.StockData = { 
-    STOCKS, 
+    get STOCKS() { return STOCKS; }, 
+    setStocksList,
     loadAllStockPrices,
     addStock,
     getAllStocks, 

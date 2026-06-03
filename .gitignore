@@ -1,0 +1,17 @@
+# Logs and databases
+*.log
+backend/market_data.db
+backend/alerts.json
+backend/rankings.json
+
+# API Keys and Secrets
+backend/config.json
+.env
+
+# MacOS
+.DS_Store
+
+# Virtualenvs
+venv/
+.venv/
+__pycache__/

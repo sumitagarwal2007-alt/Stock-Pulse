@@ -848,3 +848,27 @@
   color: white;
   box-shadow: 0 2px 4px rgba(79, 142, 247, 0.3);
 }
+
+/* ── Legal Watermark ── */
+.app-footer {
+  width: 100%;
+  padding: var(--space-4) var(--space-5);
+  margin-top: auto;
+  text-align: center;
+}
+
+.legal-watermark {
+  font-size: 11px;
+  color: var(--text-tertiary);
+  max-width: 800px;
+  margin: 0 auto;
+  line-height: 1.5;
+  padding: var(--space-3);
+  background: rgba(255, 255, 255, 0.03);
+  border: 1px solid var(--border-subtle);
+  border-radius: var(--radius-md);
+}
+
+.legal-watermark strong {
+  color: var(--text-secondary);
+}

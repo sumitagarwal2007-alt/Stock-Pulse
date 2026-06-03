@@ -40,7 +40,10 @@ class StockCard {
     return `
       <div class="stock-card ${selectedClass}" data-ticker="${stock.ticker}" onclick="window.app.selectStock('${stock.ticker}')">
         <div class="stock-card__ticker-wrap">
-          <div class="stock-card__ticker">${stock.ticker}</div>
+          <div class="stock-card__ticker">
+            ${stock.ticker}
+            ${stock._hits > 0 ? `<span style="font-size: 12px; margin-left: 4px;" title="${stock._hits} AI Catalyst Hits">🔥${stock._hits}</span>` : ''}
+          </div>
           <div class="stock-card__name">${stock.name}</div>
         </div>
         
