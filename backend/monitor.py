@@ -197,14 +197,15 @@ def run_monitor():
                     except Exception as q_err:
                         pass
                         
-                # Insert into SQLite
+                # Insert into SQLite Alerts Table
+                alert_id = str(int(time.time() * 1000))
                 try:
                     cursor.execute('''
                     INSERT OR IGNORE INTO alerts 
                     (id, ticker, timestamp, date, headline, url, keyword, impact, prediction, alert_price)
                     VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
                     ''', (
-                        str(int(time.time() * 1000)),
+                        alert_id,
                         ticker,
                         datetime.utcnow().isoformat() + "Z",
                         datetime.now().strftime('%Y-%m-%d'),
@@ -215,12 +216,31 @@ def run_monitor():
                         analysis.get('prediction', ''),
                         alert_price
                     ))
+                    
+                    # Execute Mock Trade (Budget: $1000 per trade)
+                    if alert_price and alert_price > 0:
+                        shares = 1000.0 / alert_price
+                        cursor.execute('''
+                        INSERT INTO paper_trades 
+                        (trade_id, ticker, action, price, shares, timestamp, status, alert_id)
+                        VALUES (?, ?, ?, ?, ?, ?, ?, ?)
+                        ''', (
+                            "TRD_" + alert_id,
+                            ticker,
+                            "BUY",
+                            alert_price,
+                            shares,
+                            datetime.utcnow().isoformat() + "Z",
+                            "OPEN",
+                            alert_id
+                        ))
+                        
                     conn.commit()
                     new_alerts_found = True
                 except Exception as e:
                     print(f"Failed to insert alert into DB: {e}")
                 
-                send_notification(ticker, f"${alert_price} | {analysis.get('prediction', '')}\n\n{headline}", config.get("ntfy_topic"))
+                send_notification(ticker, f"MOCK BUY Executed: $1000 at ${alert_price} | {analysis.get('prediction', '')}\n\n{headline}", config.get("ntfy_topic"))
                 
         processed_urls.add(article_url)
         # Protect Gemini Free Tier Rate Limits (15 RPM -> 1 request every 4 seconds)

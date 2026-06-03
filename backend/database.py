@@ -26,6 +26,23 @@ def init_db():
     )
     ''')
     
+    # Create paper trades table for mock trading
+    cursor.execute('''
+    CREATE TABLE IF NOT EXISTS paper_trades (
+        trade_id TEXT PRIMARY KEY,
+        ticker TEXT NOT NULL,
+        action TEXT NOT NULL,
+        price REAL NOT NULL,
+        shares REAL NOT NULL,
+        timestamp TEXT NOT NULL,
+        status TEXT NOT NULL,
+        close_price REAL,
+        close_timestamp TEXT,
+        pnl REAL,
+        alert_id TEXT
+    )
+    ''')
+    
     conn.commit()
     return conn
 
