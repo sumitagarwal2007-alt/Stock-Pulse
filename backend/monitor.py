@@ -130,7 +130,7 @@ def run_monitor():
 
     # 3. Google News RSS Autonomous Search
     queries = [
-        "stock market catalyst",
+        "tech stock momentum",
         "CEO endorsement OR acquisition rumor",
         "stock price target upgrade",
         "earnings beat stock surge",
