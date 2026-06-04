@@ -78,6 +78,16 @@ def analyze_catalyst_with_gemini(headline, summary, gemini_key):
             
     return "RATE_LIMIT"
 
+def fetch_live_price(ticker, finnhub_key):
+    try:
+        quote_url = f"https://finnhub.io/api/v1/quote?symbol={ticker}&token={finnhub_key}"
+        q_req = urllib.request.Request(quote_url, headers={'User-Agent': 'Mozilla/5.0'})
+        with urllib.request.urlopen(q_req) as q_resp:
+            q_data = json.loads(q_resp.read().decode())
+        return q_data.get('c', 0.0)
+    except:
+        return 0.0
+
 def check_recent_momentum(ticker, finnhub_key, days=5):
     """
     Check if a stock has already surged or crashed heavily over the last N days.
@@ -210,7 +220,7 @@ def run_quant():
                         keyword,
                         analysis.get('impact', 'High'),
                         analysis.get('prediction', ''),
-                        0.0, # We don't fetch price here anymore, Executioner does it
+                        fetch_live_price(ticker, finnhub_key), # Time Zero Price Capture
                         analysis.get('sentiment', 'Neutral'),
                         int(analysis.get('conviction', 50)),
                         analysis.get('price_target', 'Unknown'),

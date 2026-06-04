@@ -86,7 +86,7 @@ def run_executioner():
         
         # Find all alerts that recommend BUY, have high conviction, and haven't been traded yet
         cursor.execute('''
-        SELECT a.id, a.ticker, a.headline, a.prediction, a.conviction 
+        SELECT a.id, a.ticker, a.headline, a.prediction, a.conviction, a.timestamp, a.alert_price
         FROM alerts a 
         LEFT JOIN paper_trades pt ON a.id = pt.alert_id 
         WHERE a.recommended_action = 'BUY' 
@@ -101,51 +101,82 @@ def run_executioner():
     if not actionable_alerts:
         print("💤 No executable actions found.", flush=True)
         return
-        # Market Hours Constraint
-        if not is_market_open():
-            print(f"🛑 Market is closed. {len(actionable_alerts)} approved trades waiting in queue for market open.", flush=True)
-            return
+        
+    # Market Hours Constraint
+    if not is_market_open():
+        print(f"🛑 Market is closed. {len(actionable_alerts)} approved trades waiting in queue for market open.", flush=True)
+        return
 
-        for row in actionable_alerts:
-            alert_id, ticker, headline, prediction, conviction = row
+    for row in actionable_alerts:
+        alert_id, ticker, headline, prediction, conviction, alert_timestamp_str, alert_price = row
+        
+        # Fetch current cash balance
+        cursor.execute("SELECT cash_balance FROM portfolio_state WHERE id = 1")
+        cash_row = cursor.fetchone()
+        cash_balance = cash_row[0] if cash_row else 0.0
+        
+        trade_allocation = min(5000.0, cash_balance)
+        
+        if trade_allocation <= 0:
+            print(f"🛑 INSUFFICIENT FUNDS: Cannot execute BUY for {ticker}. Cash balance is $0.", flush=True)
+            continue
             
-            # Fetch current cash balance
-            cursor.execute("SELECT cash_balance FROM portfolio_state WHERE id = 1")
-            cash_row = cursor.fetchone()
-            cash_balance = cash_row[0] if cash_row else 0.0
+        try:
+            if alert_timestamp_str.endswith("Z"):
+                alert_timestamp_str = alert_timestamp_str[:-1]
+            alert_time = datetime.fromisoformat(alert_timestamp_str)
+        except:
+            alert_time = datetime.utcnow()
             
-            trade_allocation = min(5000.0, cash_balance)
+        time_since_alert = (datetime.utcnow() - alert_time).total_seconds()
+        
+        # 1-Hour Cooldown Window
+        if time_since_alert < 3600:
+            print(f"⏳ OBSERVING: Waiting for 1-hour cooldown on {ticker} ({(3600 - time_since_alert)/60:.1f} mins remaining)", flush=True)
+            continue
             
-            if trade_allocation <= 0:
-                print(f"🛑 INSUFFICIENT FUNDS: Cannot execute BUY for {ticker}. Cash balance is $0.", flush=True)
-                continue
+        print(f"🔥 EXECUTIONER EVALUATING BUY FOR {ticker} (Conviction: {conviction})", flush=True)
+        
+        live_price = fetch_live_price(ticker, config.get("finnhub_api_key"))
+        
+        if live_price and live_price > 0:
+            # "Sell The News" Defense
+            if alert_price > 0 and live_price < (alert_price * 0.98):
+                drop_pct = ((live_price - alert_price) / alert_price) * 100
+                print(f"🛑 TRADE ABORTED: {ticker} dropped {drop_pct:.2f}% during the 1-hour observation window. The market sold the news!", flush=True)
                 
-            print(f"🔥 EXECUTIONER INITIATING BUY FOR {ticker} (Conviction: {conviction})", flush=True)
-            
-            live_price = fetch_live_price(ticker, config.get("finnhub_api_key"))
-            
-            if live_price and live_price > 0:
-                shares = trade_allocation / live_price
-                trade_id = "TRD_" + alert_id
+                # Insert a dummy "REJECTED" trade so we don't try it again
+                trade_id = "REJ_" + alert_id
                 try:
                     cursor.execute('''
                     INSERT INTO paper_trades 
                     (trade_id, ticker, action, price, shares, timestamp, status, alert_id)
                     VALUES (?, ?, ?, ?, ?, ?, ?, ?)
-                    ''', (
-                        trade_id, ticker, "BUY", live_price, shares, 
-                        datetime.utcnow().isoformat() + "Z", "OPEN", alert_id
-                    ))
-                    
-                    # Deduct from cash balance
-                    new_balance = cash_balance - trade_allocation
-                    cursor.execute("UPDATE portfolio_state SET cash_balance = ? WHERE id = 1", (new_balance,))
-                    
-                    # Update alert_price in alerts table now that we fetched it
-                    cursor.execute("UPDATE alerts SET alert_price = ? WHERE id = ?", (live_price, alert_id))
-                    
+                    ''', (trade_id, ticker, "BUY", live_price, 0, datetime.utcnow().isoformat() + "Z", "REJECTED", alert_id))
                     conn.commit()
-                    print(f"✅ MOCK BUY EXECUTED: ${trade_allocation:.2f} USD of {ticker} @ {live_price}")
+                except:
+                    pass
+                continue
+                
+            # If price held up, execute the trade
+            shares = trade_allocation / live_price
+            trade_id = "TRD_" + alert_id
+            try:
+                cursor.execute('''
+                INSERT INTO paper_trades 
+                (trade_id, ticker, action, price, shares, timestamp, status, alert_id)
+                VALUES (?, ?, ?, ?, ?, ?, ?, ?)
+                ''', (
+                    trade_id, ticker, "BUY", live_price, shares, 
+                    datetime.utcnow().isoformat() + "Z", "OPEN", alert_id
+                ))
+                
+                # Deduct from cash balance
+                new_balance = cash_balance - trade_allocation
+                cursor.execute("UPDATE portfolio_state SET cash_balance = ? WHERE id = 1", (new_balance,))
+                
+                conn.commit()
+                print(f"✅ MOCK BUY EXECUTED: ${trade_allocation:.2f} USD of {ticker} @ {live_price}")
                 send_notification(ticker, f"MOCK BUY Executed: ${trade_allocation:.2f} at ${live_price} | Conviction: {conviction}\n\n{headline}", config.get("ntfy_topic"))
             except Exception as e:
                 print(f"Failed to record trade: {e}")
