@@ -1,0 +1,123 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>AI Trading Engine Architecture</title>
+    <style>
+        body {
+            font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, Helvetica, Arial, sans-serif;
+            background-color: #0f172a;
+            color: #f8fafc;
+            padding: 40px;
+            display: flex;
+            flex-direction: column;
+            align-items: center;
+        }
+        h1 {
+            color: #38bdf8;
+            margin-bottom: 30px;
+            text-align: center;
+        }
+        .mermaid-container {
+            background-color: #1e293b;
+            padding: 30px;
+            border-radius: 12px;
+            box-shadow: 0 10px 15px -3px rgba(0, 0, 0, 0.5);
+            width: 100%;
+            max-width: 1200px;
+            overflow-x: auto;
+        }
+    </style>
+    <!-- Include Mermaid.js -->
+    <script src="https://cdn.jsdelivr.net/npm/mermaid/dist/mermaid.min.js"></script>
+    <script>
+        mermaid.initialize({ startOnLoad: true, theme: 'dark' });
+    </script>
+</head>
+<body>
+
+    <h1>AI Algorithmic Trading Engine Architecture</h1>
+    
+    <div class="mermaid-container">
+        <div class="mermaid">
+flowchart TD
+    %% Define Styles
+    classDef agent fill:#1d4ed8,stroke:#60a5fa,stroke-width:2px,color:#fff
+    classDef api fill:#4b5563,stroke:#9ca3af,stroke-width:1px,color:#fff
+    classDef db fill:#047857,stroke:#34d399,stroke-width:2px,color:#fff
+    classDef logic fill:#b45309,stroke:#fbbf24,stroke-width:1px,color:#fff
+
+    %% External APIs
+    GoogleNews[Google News RSS]:::api
+    Finnhub[Finnhub API - Live Prices & History]:::api
+    Gemini[Google Gemini 2.5 LLM]:::api
+
+    %% Database
+    DB[(SQLite DB:\n market_data.db)]:::db
+
+    %% Agents
+    Harvester(1. Harvester Agent):::agent
+    Quant(2. Quant Agent):::agent
+    Executioner(3. Execution Agent):::agent
+    Overseer(4. Overseer Agent):::agent
+
+    %% --- 1. Harvester Flow ---
+    GoogleNews -->|1. Scrapes breaking headlines\n(Runs every 15m)| Harvester
+    Harvester -->|2. Inserts 'PENDING' news| DB
+
+    %% --- 2. Quant Flow ---
+    DB -->|3. Reads 'PENDING' news| Quant
+    Quant <-->|4. Prompts for Sentiment & Temporality| Gemini
+    
+    Quant --> QuantLogic{Semantic Temporality Filter}:::logic
+    QuantLogic -->|RETROSPECTIVE\n(Journalist Recap)| Reject1[Reject Trade]
+    QuantLogic -->|BREAKING\n(Fresh Catalyst)| QuantMomentum{Momentum Risk Filter}:::logic
+    
+    QuantMomentum <-->|Fetch 5-day history| Finnhub
+    QuantMomentum -->|Priced In\n(Surged >10% recently)| Reject2[Reject Trade]
+    QuantMomentum -->|Valid Alpha| TimeZero[Capture Time Zero Price]
+    
+    TimeZero <--> Finnhub
+    TimeZero --> DB_Alerts(5. Insert 'BUY' Alert to DB):::db
+    
+    Quant --> DB_Alerts
+
+    %% --- 3. Executioner Flow ---
+    DB -->|6. Reads 'BUY' Alerts| Executioner
+    Executioner --> ExecMarketHours{Market Open?}:::logic
+    ExecMarketHours -->|No\n(After-Hours)| Queue[Queue for 9:30 AM Open]
+    ExecMarketHours -->|Yes| Cooldown{1-Hour Cooldown Filter}:::logic
+    
+    Queue --> Cooldown
+    Cooldown -->|< 1 Hour Passed| Wait[Observe Price Action]
+    Cooldown -->|>= 1 Hour Passed| ExecCash{Sufficient Cash?}:::logic
+    
+    ExecCash -->|No\n(Cash < $5k)| Reject3[Reject: Out of Funds]
+    ExecCash -->|Yes| FetchLive[Fetch Live Price]
+    
+    FetchLive <--> Finnhub
+    FetchLive --> SellTheNews{Sell The News Filter}:::logic
+    
+    SellTheNews -->|Price dropped > 2%\nduring the 1-hour window| Reject4[Reject: Market Sold The News]
+    SellTheNews -->|Momentum Sustained| DB_Trades(7. Execute Mock Trade:\nDeduct $5,000 from Portfolio\nUpdate Paper Trades):::db
+    
+    Executioner --> DB_Trades
+
+    %% --- 4. Overseer Flow ---
+    DB -->|8. Reads 'OPEN' Trades| Overseer
+    Overseer <-->|Fetch Live Quote\n(Runs every 30s)| Finnhub
+    
+    Overseer --> OverseerLogic{Risk Management}:::logic
+    OverseerLogic -->|Take Profit +10%| Sell[Close Position]
+    OverseerLogic -->|Stop Loss -5%| Sell
+    OverseerLogic -->|Time Stop 7-days| Sell
+    OverseerLogic -->|Hold| Hold[Do Nothing]
+    
+    Sell --> DB_Close(9. Return Cash + Final PnL to Portfolio):::db
+    Overseer --> DB_Close
+        </div>
+    </div>
+
+</body>
+</html>
