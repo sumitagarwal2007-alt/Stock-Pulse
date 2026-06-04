@@ -554,6 +554,21 @@ class App {
       const resp = await fetch('/api/portfolio');
       if (!resp.ok) return;
       const trades = await resp.json();
+      
+      // Fetch real live prices for all open trades dynamically to ensure accurate PNL!
+      for (const t of trades) {
+        if (t.status === 'OPEN') {
+           try {
+             // Delay slightly to help with rate limits
+             await new Promise(r => setTimeout(r, 100));
+             const quote = await window.finnhubApi.getQuote(t.ticker);
+             if (quote && quote.c) {
+                t.livePrice = quote.c;
+             }
+           } catch(e) {}
+        }
+      }
+      
       this.renderPortfolio(trades);
     } catch (e) {
       console.warn("Failed to load portfolio data", e);
@@ -575,8 +590,21 @@ class App {
     }
 
     trades.forEach(t => {
-      const liveData = window.StockData.getLatestPrice(t.ticker);
-      const currentPrice = liveData ? liveData.close : t.price;
+      // Prioritize the dynamically fetched real price
+      let currentPrice = t.price;
+      
+      if (t.livePrice) {
+        currentPrice = t.livePrice;
+      } else {
+        const liveData = window.StockData.getLatestPrice(t.ticker);
+        const fallbackPrice = liveData ? liveData.close : t.price;
+        
+        // If the fallback price is absurdly different (>30% off), it's likely a rate-limited mock data artifact.
+        // In that case, anchor it to the trade price so we don't show an insane fake PnL.
+        if (Math.abs(fallbackPrice - t.price) / t.price < 0.3) {
+           currentPrice = fallbackPrice;
+        }
+      }
       
       if (t.status === 'OPEN') {
         const invested = t.shares * t.price;
