@@ -19,45 +19,8 @@ function setStocksList(tickers) {
 // Cache for API responses
 const priceCache = {};
 
-function generateMockPrices(ticker, targetLivePrice = null) {
-  const prices = [];
-  const to = new Date();
-  
-  // If we have a target live price, we work backwards from it so the chart perfectly matches reality
-  let currentPrice = targetLivePrice !== null ? targetLivePrice : (100 + (ticker.length * 20) + (Math.random() * 50));
-  
-  // We need to generate the array in reverse, so we'll build it backwards then reverse it
-  for (let i = 0; i <= 89; i++) {
-    const d = new Date(to);
-    d.setDate(d.getDate() - i);
-    
-    // We reverse the logic: previous close was currentPrice / (1 + changePercent)
-    let changePercent = (Math.random() - 0.5) * 0.06;
-    
-    // Simulate real massive historical bull-runs for known trending stocks
-    // (A positive daily drift going forward means a negative drift going backwards)
-    if (ticker === 'DELL') changePercent += 0.012; // Dell massive run
-    if (ticker === 'NVDA') changePercent += 0.015; // Nvidia massive run
-    if (ticker === 'PLTR') changePercent += 0.008; // Palantir strong run
-    if (ticker === 'GME') changePercent += (Math.random() > 0.8 ? 0.15 : -0.05); // Meme volatility
-    
-    const prevClose = currentPrice / (1 + changePercent);
-    const high = Math.max(currentPrice, prevClose) * (1 + Math.random() * 0.02);
-    const low = Math.min(currentPrice, prevClose) * (1 - Math.random() * 0.02);
-    
-    prices.push({
-      date: d.toISOString().split('T')[0],
-      open: prevClose,
-      high,
-      low,
-      close: currentPrice,
-      volume: Math.floor(Math.random() * 50000000) + 10000000
-    });
-    currentPrice = prevClose;
-  }
-  
-  return prices.reverse(); // Now it's oldest to newest
-}
+// No more mock data generation.
+// We strictly use Finnhub or Alpaca for real data.
 
 /**
  * Initialize all stock data by fetching from Finnhub
@@ -83,8 +46,15 @@ async function loadAllStockPrices() {
         if (historicalPrices && historicalPrices.length > 30) {
           hybridPrices = historicalPrices;
         } else {
-          // Generate a beautiful mock chart that perfectly ends exactly at the live price!
-          hybridPrices = generateMockPrices(stock.ticker, quote.c);
+          // Strictly use real live price if history fails due to rate limits
+          hybridPrices = [{
+            date: new Date().toISOString().split('T')[0],
+            open: quote.o || quote.c,
+            high: quote.h || quote.c,
+            low: quote.l || quote.c,
+            close: quote.c,
+            volume: 0
+          }];
         }
         
         // Ensure the absolute latest price matches the quote perfectly
@@ -104,12 +74,10 @@ async function loadAllStockPrices() {
         
         priceCache[stock.ticker] = hybridPrices;
       } else {
-        console.warn(`No live quote for ${stock.ticker}, using full mock data.`);
-        priceCache[stock.ticker] = generateMockPrices(stock.ticker);
+        console.warn(`No live quote for ${stock.ticker}.`);
       }
     } catch (e) {
       console.error(`Failed to load ${stock.ticker}`, e);
-      priceCache[stock.ticker] = generateMockPrices(stock.ticker);
     }
     
     await new Promise(resolve => setTimeout(resolve, 100));
@@ -159,7 +127,14 @@ async function addStock(ticker) {
     if (historicalPrices && historicalPrices.length > 30) {
       hybridPrices = historicalPrices;
     } else {
-      hybridPrices = generateMockPrices(upperTicker, quote.c);
+      hybridPrices = [{
+        date: new Date().toISOString().split('T')[0],
+        open: quote.o || quote.c,
+        high: quote.h || quote.c,
+        low: quote.l || quote.c,
+        close: quote.c,
+        volume: 0
+      }];
     }
     
     const last = hybridPrices[hybridPrices.length - 1];
