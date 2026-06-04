@@ -21,11 +21,14 @@ def analyze_catalyst_with_gemini(headline, summary, gemini_key):
     prompt = (
         "You are a Senior Quantitative Analyst at a top AI Hedge Fund. Read the following news headline and summary. "
         "Identify ALL publicly traded companies mentioned or implicitly affected. "
-        "Identify ANY market-moving event, sentiment shift, or momentum driver (even minor news is okay). "
+        "Identify ANY market-moving event, sentiment shift, or momentum driver. "
+        "CRITICAL TEMPORALITY RULE: You must determine if this is a 'BREAKING' catalyst (happening now) or a 'RETROSPECTIVE' summary (explaining why a stock already moved in the past). "
+        "If the news is RETROSPECTIVE or OLD, you MUST set the recommended_action to 'HOLD', regardless of how bullish the text is, because the alpha has already decayed. "
         "Return EXACTLY a JSON array of objects. Do not include markdown formatting. "
         "If no companies are affected, return []. "
         "Format for each object: "
         "{\"ticker\": \"<TICKER>\", \"isCatalyst\": true, \"keyword\": \"<1-3 word reason>\", \"impact\": \"<High/Medium/Low>\", "
+        "\"temporality\": \"<BREAKING or RETROSPECTIVE>\", "
         "\"prediction\": \"<1 sentence Bull/Bear thesis prediction>\", \"sentiment\": \"<Bullish/Bearish/Neutral>\", "
         "\"conviction\": <integer from 1 to 100 based on source reliability and historical weight>, "
         "\"price_target\": \"<e.g. +5% to +10%>\", \"horizon\": \"<1-7 Days / 1-3 Months / 1 Year+>\", "
@@ -163,6 +166,7 @@ def run_quant():
                 ticker = analysis['ticker'].upper()
                 keyword = analysis.get('keyword', 'UNKNOWN')
                 action = analysis.get('recommended_action', 'HOLD').upper()
+                temporality = analysis.get('temporality', 'UNKNOWN').upper()
                 
                 # ---- MOMENTUM RISK FILTER ----
                 momentum = check_recent_momentum(ticker, finnhub_key, days=5)
@@ -174,7 +178,10 @@ def run_quant():
                     continue
                 # ------------------------------
 
-                print(f"🚨 QUANT RECOMMENDS {action} ON {ticker}: {keyword}", flush=True)
+                if temporality == 'RETROSPECTIVE':
+                    print(f"🛑 TRADE REJECTED (SEMANTIC): AI flagged news for {ticker} as a RETROSPECTIVE recap.", flush=True)
+                else:
+                    print(f"🚨 QUANT RECOMMENDS {action} ON {ticker} ({temporality}): {keyword}", flush=True)
                 
                 # Auto-Track Watchlist Injection
                 if ticker not in config.get('watchlist', []):
