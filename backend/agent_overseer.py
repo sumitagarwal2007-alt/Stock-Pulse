@@ -6,6 +6,11 @@ import urllib.parse
 from datetime import datetime, timezone, timedelta
 import subprocess
 import time
+from datetime import datetime, timezone, timedelta, time as datetime_time
+try:
+    import zoneinfo
+except ImportError:
+    from backports import zoneinfo
 
 BASE_DIR = os.path.dirname(os.path.abspath(__file__))
 CONFIG_PATH = os.path.join(BASE_DIR, 'config.json')
@@ -42,6 +47,24 @@ def get_current_price(ticker, finnhub_key):
             return data.get('c', 0.0)
     except Exception as e:
         return 0.0
+
+def is_market_open():
+    """
+    Check if current time is within US Market Hours:
+    Monday-Friday, 9:30 AM - 4:00 PM Eastern Time.
+    """
+    try:
+        eastern = zoneinfo.ZoneInfo("America/New_York")
+    except Exception:
+        return True
+        
+    now = datetime.now(eastern)
+    if now.weekday() > 4:
+        return False
+        
+    market_open = datetime_time(9, 30)
+    market_close = datetime_time(16, 0)
+    return market_open <= now.time() <= market_close
 
 def summarize_with_gemini(portfolio_summary, gemini_key):
     if not gemini_key:
@@ -100,6 +123,11 @@ def run_overseer(trigger_daily_report=False):
     except Exception as e:
         print(f"DB Error: {e}")
         return
+        
+    # Market Hours Constraint
+    if not is_market_open() and not trigger_daily_report:
+        print("🛑 Market is closed. Overseer will not close positions until market open.", flush=True)
+        return
     
     portfolio_summary = {
         "total_closed_pnl": 0.0,
@@ -143,11 +171,16 @@ def run_overseer(trigger_daily_report=False):
             reason = "Max Hold Time Reached (7 Days)"
             
         if should_sell:
+            # 1. Update trade status
             cursor.execute('''
             UPDATE paper_trades 
             SET status = 'CLOSED', close_price = ?, close_timestamp = ?, pnl = ?
             WHERE trade_id = ?
             ''', (current_price, now.isoformat() + "Z", unrealized_pnl, trade_id))
+            
+            # 2. Return cash to portfolio (entry allocation + unrealized_pnl)
+            total_return = (entry_price * shares) + unrealized_pnl
+            cursor.execute("UPDATE portfolio_state SET cash_balance = cash_balance + ? WHERE id = 1", (total_return,))
             
             portfolio_summary["closed_trades_today"].append({
                 "ticker": ticker,

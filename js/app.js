@@ -553,7 +553,16 @@ class App {
     try {
       const resp = await fetch('/api/portfolio');
       if (!resp.ok) return;
-      const trades = await resp.json();
+      const data = await resp.json();
+      
+      let cashBalance = 0;
+      let trades = [];
+      if (data.trades) {
+        cashBalance = data.cash_balance;
+        trades = data.trades;
+      } else {
+        trades = data;
+      }
       
       // Fetch real live prices for all open trades dynamically to ensure accurate PNL!
       for (const t of trades) {
@@ -569,17 +578,22 @@ class App {
         }
       }
       
-      this.renderPortfolio(trades);
+      this.renderPortfolio(trades, cashBalance);
     } catch (e) {
       console.warn("Failed to load portfolio data", e);
     }
   }
 
-  renderPortfolio(trades) {
+  renderPortfolio(trades, cashBalance = 0) {
     let totalInvested = 0;
     let currentBalance = 0;
     let realizedPnl = 0;
     let unrealizedPnl = 0;
+
+    const cashEl = document.getElementById('portfolio-cash');
+    if (cashEl) {
+      cashEl.innerText = `$${cashBalance.toLocaleString('en-US', {minimumFractionDigits: 2, maximumFractionDigits: 2})}`;
+    }
 
     const listEl = document.getElementById('portfolio-list');
     if (!listEl) return;

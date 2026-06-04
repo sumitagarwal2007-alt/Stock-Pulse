@@ -83,9 +83,6 @@ class APIHandler(SimpleHTTPRequestHandler):
             return
             
         if self.path == '/api/portfolio':
-            self.send_response(200)
-            self.send_header('Content-type', 'application/json')
-            self.end_headers()
             try:
                 conn = sqlite3.connect(DB_PATH)
                 cursor = conn.cursor()
@@ -98,11 +95,17 @@ class APIHandler(SimpleHTTPRequestHandler):
                     ORDER BY pt.timestamp DESC
                 """)
                 rows = cursor.fetchall()
+                
+                # Fetch Cash Balance
+                cursor.execute("SELECT cash_balance FROM portfolio_state WHERE id = 1")
+                cash_row = cursor.fetchone()
+                cash_balance = cash_row[0] if cash_row else 0.0
+                
                 conn.close()
                 
-                trades = []
+                portfolio = []
                 for row in rows:
-                    trades.append({
+                    portfolio.append({
                         "trade_id": row[0],
                         "ticker": row[1],
                         "action": row[2],
@@ -117,8 +120,21 @@ class APIHandler(SimpleHTTPRequestHandler):
                         "prediction": row[11],
                         "headline": row[12]
                     })
-                self.wfile.write(json.dumps(trades).encode())
+                
+                self.send_response(200)
+                self.send_header('Content-type', 'application/json')
+                self.send_header('Access-Control-Allow-Origin', '*')
+                self.end_headers()
+                
+                response = {
+                    "cash_balance": cash_balance,
+                    "trades": portfolio
+                }
+                self.wfile.write(json.dumps(response).encode())
             except Exception as e:
+                self.send_response(500)
+                self.send_header('Content-type', 'application/json')
+                self.end_headers()
                 self.wfile.write(json.dumps({"error": str(e)}).encode())
             return
         

@@ -5,7 +5,11 @@ import urllib.request
 import urllib.parse
 import sqlite3
 import subprocess
-from datetime import datetime
+from datetime import datetime, time as datetime_time
+try:
+    import zoneinfo
+except ImportError:
+    from backports import zoneinfo
 
 # Paths
 BASE_DIR = os.path.dirname(os.path.abspath(__file__))
@@ -38,9 +42,33 @@ def fetch_live_price(ticker, finnhub_key):
         q_req = urllib.request.Request(quote_url, headers={'User-Agent': 'Mozilla/5.0'})
         with urllib.request.urlopen(q_req) as q_resp:
             q_data = json.loads(q_resp.read().decode())
-            return q_data.get('c', 0.0)
+        return q_data.get('c', 0.0)
     except:
         return 0.0
+
+def is_market_open():
+    """
+    Check if current time is within US Market Hours:
+    Monday-Friday, 9:30 AM - 4:00 PM Eastern Time.
+    """
+    try:
+        eastern = zoneinfo.ZoneInfo("America/New_York")
+    except Exception:
+        # Fallback if timezone not found (unlikely in Python 3.9+)
+        return True
+        
+    now = datetime.now(eastern)
+    
+    # 0 = Monday, 4 = Friday
+    if now.weekday() > 4:
+        return False
+        
+    market_open = datetime_time(9, 30)
+    market_close = datetime_time(16, 0)
+    
+    current_time = now.time()
+    
+    return market_open <= current_time <= market_close
 
 def run_executioner():
     current_time = datetime.now().strftime("%I:%M:%S %p")
@@ -73,32 +101,52 @@ def run_executioner():
     if not actionable_alerts:
         print("💤 No executable actions found.", flush=True)
         return
-        
-    for row in actionable_alerts:
-        alert_id, ticker, headline, prediction, conviction = row
-        print(f"🔥 EXECUTIONER INITIATING BUY FOR {ticker} (Conviction: {conviction})", flush=True)
-        
-        live_price = fetch_live_price(ticker, config.get("finnhub_api_key"))
-        
-        if live_price and live_price > 0:
-            shares = 1000.0 / live_price
-            trade_id = "TRD_" + alert_id
-            try:
-                cursor.execute('''
-                INSERT INTO paper_trades 
-                (trade_id, ticker, action, price, shares, timestamp, status, alert_id)
-                VALUES (?, ?, ?, ?, ?, ?, ?, ?)
-                ''', (
-                    trade_id, ticker, "BUY", live_price, shares, 
-                    datetime.utcnow().isoformat() + "Z", "OPEN", alert_id
-                ))
+        # Market Hours Constraint
+        if not is_market_open():
+            print(f"🛑 Market is closed. {len(actionable_alerts)} approved trades waiting in queue for market open.", flush=True)
+            return
+
+        for row in actionable_alerts:
+            alert_id, ticker, headline, prediction, conviction = row
+            
+            # Fetch current cash balance
+            cursor.execute("SELECT cash_balance FROM portfolio_state WHERE id = 1")
+            cash_row = cursor.fetchone()
+            cash_balance = cash_row[0] if cash_row else 0.0
+            
+            trade_allocation = min(5000.0, cash_balance)
+            
+            if trade_allocation <= 0:
+                print(f"🛑 INSUFFICIENT FUNDS: Cannot execute BUY for {ticker}. Cash balance is $0.", flush=True)
+                continue
                 
-                # Update alert_price in alerts table now that we fetched it
-                cursor.execute("UPDATE alerts SET alert_price = ? WHERE id = ?", (live_price, alert_id))
-                
-                conn.commit()
-                print(f"✅ MOCK BUY EXECUTED: 1000 USD of {ticker} @ {live_price}")
-                send_notification(ticker, f"MOCK BUY Executed: $1000 at ${live_price} | Conviction: {conviction}\n\n{headline}", config.get("ntfy_topic"))
+            print(f"🔥 EXECUTIONER INITIATING BUY FOR {ticker} (Conviction: {conviction})", flush=True)
+            
+            live_price = fetch_live_price(ticker, config.get("finnhub_api_key"))
+            
+            if live_price and live_price > 0:
+                shares = trade_allocation / live_price
+                trade_id = "TRD_" + alert_id
+                try:
+                    cursor.execute('''
+                    INSERT INTO paper_trades 
+                    (trade_id, ticker, action, price, shares, timestamp, status, alert_id)
+                    VALUES (?, ?, ?, ?, ?, ?, ?, ?)
+                    ''', (
+                        trade_id, ticker, "BUY", live_price, shares, 
+                        datetime.utcnow().isoformat() + "Z", "OPEN", alert_id
+                    ))
+                    
+                    # Deduct from cash balance
+                    new_balance = cash_balance - trade_allocation
+                    cursor.execute("UPDATE portfolio_state SET cash_balance = ? WHERE id = 1", (new_balance,))
+                    
+                    # Update alert_price in alerts table now that we fetched it
+                    cursor.execute("UPDATE alerts SET alert_price = ? WHERE id = ?", (live_price, alert_id))
+                    
+                    conn.commit()
+                    print(f"✅ MOCK BUY EXECUTED: ${trade_allocation:.2f} USD of {ticker} @ {live_price}")
+                send_notification(ticker, f"MOCK BUY Executed: ${trade_allocation:.2f} at ${live_price} | Conviction: {conviction}\n\n{headline}", config.get("ntfy_topic"))
             except Exception as e:
                 print(f"Failed to record trade: {e}")
         else:

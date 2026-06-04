@@ -84,6 +84,19 @@ def init_db():
     )
     ''')
     
+    # Create portfolio_state table to track cash balance
+    cursor.execute('''
+    CREATE TABLE IF NOT EXISTS portfolio_state (
+        id INTEGER PRIMARY KEY CHECK (id = 1),
+        cash_balance REAL NOT NULL
+    )
+    ''')
+    
+    # Seed the initial $100,000 cash balance if it doesn't exist
+    cursor.execute('''
+    INSERT OR IGNORE INTO portfolio_state (id, cash_balance) VALUES (1, 100000.0)
+    ''')
+    
     conn.commit()
     return conn
 
