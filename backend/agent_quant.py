@@ -75,6 +75,37 @@ def analyze_catalyst_with_gemini(headline, summary, gemini_key):
             
     return "RATE_LIMIT"
 
+def check_recent_momentum(ticker, finnhub_key, days=5):
+    """
+    Check if a stock has already surged or crashed heavily over the last N days.
+    Returns the percentage change (e.g. 12.5 for 12.5%).
+    Returns 0.0 if data cannot be fetched.
+    """
+    if not finnhub_key:
+        return 0.0
+        
+    try:
+        to_time = int(time.time())
+        from_time = to_time - (days * 24 * 60 * 60)
+        
+        url = f"https://finnhub.io/api/v1/stock/candle?symbol={ticker}&resolution=D&from={from_time}&to={to_time}&token={finnhub_key}"
+        req = urllib.request.Request(url)
+        with urllib.request.urlopen(req) as response:
+            if response.getcode() == 200:
+                data = json.loads(response.read().decode())
+                if data.get('s') == 'ok' and data.get('c'):
+                    closes = data['c']
+                    if len(closes) >= 2:
+                        oldest_close = closes[0]
+                        newest_close = closes[-1]
+                        if oldest_close > 0:
+                            pct_change = ((newest_close - oldest_close) / oldest_close) * 100.0
+                            return pct_change
+    except Exception as e:
+        pass
+        
+    return 0.0
+
 def run_quant():
     current_time = datetime.now().strftime("%I:%M:%S %p")
     print(f"\n[{current_time}] 🧠 Agent 2 (Quant) checking for unanalyzed news...", flush=True)
@@ -90,6 +121,8 @@ def run_quant():
     if not gemini_key or gemini_key == "YOUR_GEMINI_KEY":
         print("❌ Missing Gemini API Key")
         return
+
+    finnhub_key = config.get("finnhub_api_key")
 
     try:
         conn = sqlite3.connect(DB_PATH)
@@ -130,6 +163,17 @@ def run_quant():
                 ticker = analysis['ticker'].upper()
                 keyword = analysis.get('keyword', 'UNKNOWN')
                 action = analysis.get('recommended_action', 'HOLD').upper()
+                
+                # ---- MOMENTUM RISK FILTER ----
+                momentum = check_recent_momentum(ticker, finnhub_key, days=5)
+                if action == 'BUY' and momentum > 10.0:
+                    print(f"🛑 TRADE REJECTED: {ticker} already surged +{momentum:.1f}% in the last 5 days. Catalyst is priced in.", flush=True)
+                    continue
+                elif action == 'SELL' and momentum < -10.0:
+                    print(f"🛑 TRADE REJECTED: {ticker} already crashed {momentum:.1f}% in the last 5 days. Catalyst is priced in.", flush=True)
+                    continue
+                # ------------------------------
+
                 print(f"🚨 QUANT RECOMMENDS {action} ON {ticker}: {keyword}", flush=True)
                 
                 # Auto-Track Watchlist Injection
